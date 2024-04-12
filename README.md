@@ -32,6 +32,12 @@ Or you can test several domains by putting all in a file:
 python3 mergen.py -file domains.txt -all
 ```
 
+You can use several flags at one such as:
+
+```bash
+python3 mergen.py -url https://example.com -ssl -cookie -cors
+```
+
 ## Parameters
 
 options:
@@ -52,3 +58,11 @@ options:
   -cjacking       Perform clickjacking vulnerability check
   -all            Perform all checks
 ```
+
+## Special Thanks
+
+To our mascot cat Hashcat and his mother J,
+To my gang lolo.txt,
+To my beloved family members who supports me in every turn,
+
+Love you all.
