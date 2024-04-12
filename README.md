@@ -1,7 +1,5 @@
 # Mergen
 
-![image](https://github.com/redhotchilihacker1/Mergen/assets/72512209/0f86ee7a-aa34-4c2a-81f5-536b3518391f)
-
 Mergen is a tool to identify several vulnerabilities during your pentest process.
 
 ## How to Install
