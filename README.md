@@ -1,6 +1,6 @@
 # Mergen
 
-Mergen is a tool to identify several vulnerabilities during your pentest process.
+Mergen is a web scanning tool to conduct basic recon steps and identify several vulnerabilites during your pentest process.
 
 ## How to Install
 
