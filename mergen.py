@@ -16,7 +16,6 @@ from datetime import datetime
 from colorama import Fore, Style
 from urllib.parse import urlparse
 from instagramy import InstagramUser
-from requests.exceptions import SSLError
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
