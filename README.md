@@ -7,7 +7,7 @@ Mergen is a web scanning tool to conduct basic recon steps and identify several 
 1-Clone the project:
 
 ```bash
-https://github.com/redhotchilihacker1/Mergen.git
+git clone https://github.com/redhotchilihacker1/Mergen.git
 ```
 
 2-Install required libraries:
