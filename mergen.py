@@ -16,7 +16,7 @@ from datetime import datetime
 from colorama import Fore, Style
 from urllib.parse import urlparse
 from instagramy import InstagramUser
-
+from requests.exceptions import SSLError
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
@@ -146,17 +146,33 @@ def check_security_headers(url):
     except Exception as e:
         print("Error:", e)
 
-def check_debug_enabled(url):
+def check_debugging_enabled(url):
     try:
-        response = requests.request('DEBUG', url, verify=False)
-        if response.status_code == 405:
+        headers = {'Command': 'stop-debug'}
+        response = requests.request('DEBUG', url, headers=headers, verify=False)
+        if response.status_code == 200 and 'OK' in response.text:
+            print(f"{Fore.GREEN + Style.BRIGHT}HTTP DEBUG is enabled.{Style.RESET_ALL}")
+        elif response.status_code == 405:
             print(f"{Fore.RED + Style.BRIGHT}HTTP DEBUG method is not enabled.{Style.RESET_ALL}")
         elif response.status_code == 501:
             print(f"{Fore.RED + Style.BRIGHT}Host doesn't support HTTP DEBUG method.{Style.RESET_ALL}")
         else:
-            print(f"{Fore.GREEN + Style.BRIGHT}HTTP DEBUG is enabled.{Style.RESET_ALL}")
+            print(f"{Fore.RED + Style.BRIGHT}Unexpected status code: {response.status_code}.{Style.RESET_ALL}")
+            
+        # Check for TRACE method
+        if ('allow' in response.headers and 'TRACE' in response.headers['allow']) or ('public' in response.headers and 'TRACE' in response.headers['public']):
+            print(f"{Fore.GREEN + Style.BRIGHT}TRACE method is allowed.{Style.RESET_ALL}")
+        else:
+            print(f"{Fore.RED + Style.BRIGHT}TRACE method is not allowed.{Style.RESET_ALL}")
+
+        # Check for TRACK method
+        if ('allow' in response.headers and 'TRACK' in response.headers['allow']) or ('public' in response.headers and 'TRACK' in response.headers['public']):
+            print(f"{Fore.GREEN + Style.BRIGHT}TRACK method is allowed.{Style.RESET_ALL}")
+        else:
+            print(f"{Fore.RED + Style.BRIGHT}TRACK method is not allowed.{Style.RESET_ALL}")
+    
     except requests.exceptions.RequestException as e:
-        print(f"{Fore.RED + Style.BRIGHT}Error:", e)
+        print(f"{Fore.RED + Style.BRIGHT}Error: {e}{Style.RESET_ALL}")
 
 def get_hash_type(value):
     # Hash types
@@ -309,7 +325,7 @@ def check_instagram_link(url):
 
 def check_cors_vulnerability(url):
     # Reflected Origins Test
-    reflected_origins_response = requests.get(url, headers={"Origin": "https://attackerdomain.com"})
+    reflected_origins_response = requests.get(url, headers={"Origin": "https://attackerdomain.com"}, verify=False)
     if "https://attackerdomain.com" in reflected_origins_response.headers.get("Access-Control-Allow-Origin", "") and \
             "true" in reflected_origins_response.headers.get("Access-Control-Allow-Credentials", "").lower():
         print("\033[1m\033[92mReflected Origins Test: Potential CORS \033[0m")
@@ -318,14 +334,14 @@ def check_cors_vulnerability(url):
 
     # Trusted Subdomains Test
     attacker_domain = url.split("//")[1].split("/")[0]
-    trusted_subdomains_response = requests.get(url, headers={"Origin": f"https://attacker.{attacker_domain}"})
+    trusted_subdomains_response = requests.get(url, headers={"Origin": f"https://attacker.{attacker_domain}"}, verify=False)
     if trusted_subdomains_response.headers.get("Access-Control-Allow-Origin", ""):
         print("\033[1m\033[92mTrusted Subdomains Test: Potential CORS\033[0m")
     else:
         print("\033[1m\033[91mTrusted Subdomains Test: No Potential CORS\033[0m")
 
     # Null Origin Test
-    null_origin_response = requests.get(url, headers={"Origin": "null"})
+    null_origin_response = requests.get(url, headers={"Origin": "null"}, verify=False)
     if "null" in null_origin_response.headers.get("Access-Control-Allow-Origin", "") and \
             "true" in null_origin_response.headers.get("Access-Control-Allow-Credentials", "").lower():
         print("\033[1m\033[92mNull Origin Test: Potential CORS\033[0m")
@@ -433,7 +449,7 @@ def main():
         group.add_argument("-url", nargs="*", type=str, help="URL of the website to be analyzed")
         group.add_argument("-file", type=str, help="File containing URLs to be analyzed")
         parser.add_argument("-cookie", action="store_true", help="Enable checking of cookie values")
-        parser.add_argument("-method", action="store_true", help="Check if HTTP DEBUG method is enabled")
+        parser.add_argument("-method", action="store_true", help="Check which HTTP Debugging methods are enabled")
         parser.add_argument("-headers", action="store_true", help="Enable checking of security headers")
         parser.add_argument("-ssl", action="store_true", help="Enable checking of SSL/TLS versions")
         parser.add_argument("-tech", action="store_true", help="Identify web technologies used")
@@ -451,12 +467,12 @@ def main():
             parser.error("-all flag can only be used with -file and -url flags")
 
 
-        urls = args.url or []  # None olmasın diye varsayılan olarak boş liste atadık
+        urls = args.url or []  
         if args.file:
             with open(args.file, 'r') as file:
-                file_contents = file.read().strip()  # Dosyadaki gereksiz boşlukları temizle
-            if file_contents:  # Dosya içeriği varsa işleme al
-                urls += file_contents.splitlines()  # Dosya içeriğini ekleyerek listeyi genişlet
+                file_contents = file.read().strip() 
+            if file_contents:
+                urls += file_contents.splitlines()  
 
 
         printed_banner = False
@@ -499,8 +515,8 @@ def main():
                 print("\n")
 
             if args.method or args.all:
-                print_banner_with_border("HTTP DEBUG Check")
-                debug_result = check_debug_enabled(url)
+                print_banner_with_border("HTTP Debugging Methods")
+                debug_result = check_debugging_enabled(url)
                 print("\n")
 
             if args.tech or args.all:
