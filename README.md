@@ -66,3 +66,7 @@ To my gang lolo.txt,
 To my beloved family members who supports me in every turn,
 
 Love you all.
+
+# Disclaimer
+
+This project is purely for educational purposes, use at your own risk. I do not in any way encourage the illegal use of this software or attacking targets without prior authorization.
