@@ -61,7 +61,7 @@ options:
 
 ## Special Thanks
 
-To our mascot cat Hashcat and his mother J,
+To our mascot cat Hashcat and her mother J,
 To my gang lolo.txt,
 To my beloved family members who supports me in every turn,
 
