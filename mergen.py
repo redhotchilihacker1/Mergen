@@ -16,6 +16,7 @@ from datetime import datetime
 from colorama import Fore, Style
 from urllib.parse import urlparse
 from instagramy import InstagramUser
+from requests.exceptions import SSLError
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
@@ -29,7 +30,6 @@ class bcolors:
     BOLD = '\033[1m'
     UNDERLINE = '\033[4m'
 
-#for later use
 def print_centered(text):
     terminal_width = shutil.get_terminal_size().columns
     padding_width = (terminal_width - len(text)) // 2
@@ -38,11 +38,9 @@ def print_centered(text):
 def print_banner_with_border(text):
     terminal_width = shutil.get_terminal_size().columns
     text_length = len(text)
-    #print("\n")
-    print(Style.BRIGHT + "-" * (text_length + 4) + Style.RESET_ALL)  # Above Header
-    print(Style.BRIGHT + f"| {text} |" + Style.RESET_ALL)  # Header
-    print(Style.BRIGHT + "-" * (text_length + 4) + Style.RESET_ALL)  # Below Header
-
+    print(Style.BRIGHT + "-" * (text_length + 4) + Style.RESET_ALL)
+    print(Style.BRIGHT + f"| {text} |" + Style.RESET_ALL)
+    print(Style.BRIGHT + "-" * (text_length + 4) + Style.RESET_ALL)
 
 def print_banner(url):
     ascii_banner = """
@@ -58,11 +56,12 @@ def print_banner(url):
     print(ascii_banner)
 
 def print_url(url):
-    print(f"{bcolors.BOLD}{Fore.BLUE}{url}{Style.RESET_ALL}\n")  # User-supplied URL
+    print(f"{bcolors.BOLD}{Fore.BLUE}{url}{Style.RESET_ALL}\n")
 
-def check_ssl_versions(url):
+def check_ssl_versions(url, html_report):
     if url.startswith("http://"):
         print("HTTP protocol in use, skipping...")
+        html_report.append("<p>HTTP protocol in use, skipping...</p>")
         return
 
     if url.startswith("https://"):
@@ -71,62 +70,74 @@ def check_ssl_versions(url):
             context.minimum_version = ssl.TLSVersion.TLSv1_2
             context.maximum_version = ssl.TLSVersion.TLSv1_3
 
-            url = url[8:]  # remove "https://"
+            url_hostname = urlparse(url).hostname
 
-            with socket.create_connection((url, 443)) as sock:
-                with context.wrap_socket(sock, server_hostname=url) as ssock:
+            with socket.create_connection((url_hostname, 443)) as sock:
+                with context.wrap_socket(sock, server_hostname=url_hostname) as ssock:
                     ssl_version = ssock.version()
                     print(f"{url} TLS in use. Version: {ssl_version}")
+                    html_report.append(f"<p>{url} TLS in use. Version: {ssl_version}</p>")
 
         except ssl.SSLError as e:
             if "sslv3 alert handshake failure" in str(e):
                 print(f"{url} {Fore.RED}SSLv3 in use.{Style.RESET_ALL}")
+                html_report.append(f"<p>{url} <span style='color:red;'>SSLv3 in use.</span></p>")
             elif "sslv2 alert handshake failure" in str(e):
                 print(f"{url} {Fore.RED}SSLv2 in use.{Style.RESET_ALL}")
+                html_report.append(f"<p>{url} <span style='color:red;'>SSLv2 in use.</span></p>")
             else:
                 print(f"{url} SSL/TLS version unknown.")
+                html_report.append(f"<p>{url} SSL/TLS version unknown.</p>")
         except Exception as e:
             print(f"Error: {e}")
+            html_report.append(f"<p>Error: {e}</p>")
     else:
         print("Invalid URL.")
+        html_report.append("<p>Invalid URL.</p>")
 
-
-def check_sslv2_support(url):
+def check_sslv2_support(url, html_report):
     try:
         if url.startswith("http://"):
             return
         elif url.startswith("https://"):
-            url = url[8:]
+            url_hostname = urlparse(url).hostname
             
-        result = subprocess.run(['openssl', 's_client', '-connect', f'{url}:443', '-ssl2'], capture_output=True, text=True, timeout=10)
+        result = subprocess.run(['openssl', 's_client', '-connect', f'{url_hostname}:443', '-ssl2'], capture_output=True, text=True, timeout=10)
         if "SSL-Session:" in result.stdout:
             print(f"{url} {Fore.RED}SSLv2 supported.{Style.RESET_ALL}")
+            html_report.append(f"<p>{url} <span style='color:red;'>SSLv2 supported.</span></p>")
         else:
             print(f"{url} {Fore.GREEN}SSLv2 doesn't supported.{Style.RESET_ALL}")
+            html_report.append(f"<p>{url} <span style='color:green;'>SSLv2 doesn't supported.</span></p>")
     except subprocess.TimeoutExpired:
-        print("İşlem zaman aşımına uğradı.")
+        print("The process has timed out.")
+        html_report.append("<p>The process has timed out.</p>")
     except Exception as e:
-        print(f"Hata: {e}")
+        print(f"Error: {e}")
+        html_report.append(f"<p>Error: {e}</p>")
 
-def check_sslv3_support(url):
+def check_sslv3_support(url, html_report):
     try:
         if url.startswith("http://"):
             return
         elif url.startswith("https://"):
-            url = url[8:]
+            url_hostname = urlparse(url).hostname
             
-        result = subprocess.run(['openssl', 's_client', '-connect', f'{url}:443', '-ssl3'], capture_output=True, text=True, timeout=10)
+        result = subprocess.run(['openssl', 's_client', '-connect', f'{url_hostname}:443', '-ssl3'], capture_output=True, text=True, timeout=10)
         if "SSL-Session:" in result.stdout:
             print(f"{url} {Fore.RED}SSLv3 supported.{Style.RESET_ALL}")
+            html_report.append(f"<p>{url} <span style='color:red;'>SSLv3 supported.</span></p>")
         else:
             print(f"{url} {Fore.GREEN}SSLv3 doesn't supported.{Style.RESET_ALL}")
+            html_report.append(f"<p>{url} <span style='color:green;'>SSLv3 doesn't supported.</span></p>")
     except subprocess.TimeoutExpired:
         print("The process has timed out.")
+        html_report.append("<p>The process has timed out.</p>")
     except Exception as e:
         print(f"Error: {e}")
+        html_report.append(f"<p>Error: {e}</p>")
 
-
-def check_security_headers(url):
+def check_security_headers(url, html_report):
     try:
         response = requests.get(url, verify=False)
         headers = response.headers
@@ -141,40 +152,55 @@ def check_security_headers(url):
             "Feature-Policy": "Feature-Policy" in headers
         }
 
+        for header, present in security_headers.items():
+            if present:
+                print(header + ":", Fore.GREEN + Style.BRIGHT + "Present" + Style.RESET_ALL)
+                html_report.append(f"<p>{header}: <span style='color:green;'>Present</span></p>")
+            else:
+                print(header + ":", Fore.RED + Style.BRIGHT + "Not Present" + Style.RESET_ALL)
+                html_report.append(f"<p>{header}: <span style='color:red;'>Not Present</span></p>")
+
         return security_headers
     except Exception as e:
         print("Error:", e)
+        html_report.append(f"<p>Error: {e}</p>")
 
-def check_debugging_enabled(url):
+def check_debugging_enabled(url, html_report):
     try:
         headers = {'Command': 'stop-debug'}
         response = requests.request('DEBUG', url, headers=headers, verify=False)
         if response.status_code == 200 and 'OK' in response.text:
             print(f"{Fore.GREEN + Style.BRIGHT}HTTP DEBUG is enabled.{Style.RESET_ALL}")
+            html_report.append(f"<p><span style='color:green;'>HTTP DEBUG is enabled.</span></p>")
         elif response.status_code == 405:
             print(f"{Fore.RED + Style.BRIGHT}HTTP DEBUG method is not enabled.{Style.RESET_ALL}")
+            html_report.append(f"<p><span style='color:red;'>HTTP DEBUG method is not enabled.</span></p>")
         elif response.status_code == 501:
             print(f"{Fore.RED + Style.BRIGHT}Host doesn't support HTTP DEBUG method.{Style.RESET_ALL}")
+            html_report.append(f"<p><span style='color:red;'>Host doesn't support HTTP DEBUG method.</span></p>")
         else:
             print(f"{Fore.RED + Style.BRIGHT}Unexpected status code: {response.status_code}.{Style.RESET_ALL}")
+            html_report.append(f"<p><span style='color:red;'>Unexpected status code: {response.status_code}.</span></p>")
             
-        # Check for TRACE method
         if ('allow' in response.headers and 'TRACE' in response.headers['allow']) or ('public' in response.headers and 'TRACE' in response.headers['public']):
             print(f"{Fore.GREEN + Style.BRIGHT}TRACE method is allowed.{Style.RESET_ALL}")
+            html_report.append(f"<p><span style='color:green;'>TRACE method is allowed.</span></p>")
         else:
             print(f"{Fore.RED + Style.BRIGHT}TRACE method is not allowed.{Style.RESET_ALL}")
+            html_report.append(f"<p><span style='color:red;'>TRACE method is not allowed.</span></p>")
 
-        # Check for TRACK method
         if ('allow' in response.headers and 'TRACK' in response.headers['allow']) or ('public' in response.headers and 'TRACK' in response.headers['public']):
             print(f"{Fore.GREEN + Style.BRIGHT}TRACK method is allowed.{Style.RESET_ALL}")
+            html_report.append(f"<p><span style='color:green;'>TRACK method is allowed.</span></p>")
         else:
             print(f"{Fore.RED + Style.BRIGHT}TRACK method is not allowed.{Style.RESET_ALL}")
+            html_report.append(f"<p><span style='color:red;'>TRACK method is not allowed.</span></p>")
     
     except requests.exceptions.RequestException as e:
         print(f"{Fore.RED + Style.BRIGHT}Error: {e}{Style.RESET_ALL}")
+        html_report.append(f"<p><span style='color:red;'>Error: {e}</span></p>")
 
 def get_hash_type(value):
-    # Hash types
     hash_types = {
         32: "MD5",
         40: "SHA1",
@@ -184,66 +210,98 @@ def get_hash_type(value):
         128: "SHA-512"
     }
     
-    # Take the lenght of the hash
     value_length = len(value)
     
-    # Determin the hash type by it's lenght
     if value_length in hash_types.keys():
         return hash_types[value_length]
     else:
         return "Unknown"
 
-def print_cookie(cookie):
+def print_cookie(cookie, html_report):
     print("Cookie Name:", cookie.name)
     print("Cookie Value:", cookie.value)
     print("Cookie Hash Type:", get_hash_type(cookie.value))
     
+    html_report.append(f"<p>Cookie Name: {cookie.name}</p>")
+    html_report.append(f"<p>Cookie Value: {cookie.value}</p>")
+    html_report.append(f"<p>Cookie Hash Type: {get_hash_type(cookie.value)}</p>")
+    
     if cookie.get_nonstandard_attr('httponly'):
         print("HTTPOnly:", Fore.GREEN + Style.BRIGHT + "True" + Style.RESET_ALL)
+        html_report.append(f"<p>HTTPOnly: <span style='color:green;'>True</span></p>")
     else:
         print("HTTPOnly:", Fore.RED + Style.BRIGHT + "False" + Style.RESET_ALL)
+        html_report.append(f"<p>HTTPOnly: <span style='color:red;'>False</span></p>")
     
     if cookie.get_nonstandard_attr('samesite') is None:
         print("SameSite:", Fore.RED + Style.BRIGHT + "None" + Style.RESET_ALL)
+        html_report.append(f"<p>SameSite: <span style='color:red;'>None</span></p>")
     else:
         print("SameSite:", Fore.GREEN + Style.BRIGHT + str(cookie.get_nonstandard_attr('samesite')) + Style.RESET_ALL)
+        html_report.append(f"<p>SameSite: <span style='color:green;'>{cookie.get_nonstandard_attr('samesite')}</span></p>")
     
     if cookie.secure:
         print("Secure:", Fore.GREEN + Style.BRIGHT + "True" + Style.RESET_ALL)
+        html_report.append(f"<p>Secure: <span style='color:green;'>True</span></p>")
     else:
         print("Secure:", Fore.RED + Style.BRIGHT + "False" + Style.RESET_ALL)
+        html_report.append(f"<p>Secure: <span style='color:red;'>False</span></p>")
         
     print("---------------------------------------")
+    html_report.append("<hr>")
 
-def get_cookies_from_url(url):
+def get_cookies_from_url(url, html_report):
     try:
         response = requests.get(url, verify=False)
         cookies = response.cookies
 
         if not cookies:
             print("Couldn't find any cookies to process.")
+            html_report.append("<p>Couldn't find any cookies to process.</p>")
             return
 
         for cookie in cookies:
-            print_cookie(cookie)
+            print_cookie(cookie, html_report)
 
     except Exception as e:
         print("Error:", e)
+        html_report.append(f"<p>Error: {e}</p>")
 
-def get_technologies(url):
+def get_technologies(url, html_report):
     try:
         result = subprocess.run(['wad', '-u', url], capture_output=True, text=True)
         if result.returncode == 0:
-            return json.loads(result.stdout)
+            technologies = json.loads(result.stdout)
+            if technologies:
+                print("Technologies used in the given website:")
+                html_report.append("<p>Technologies used in the given website:</p>")
+                for category, tech_list in technologies.items():
+                    print(f"\n{category.capitalize()}:")
+                    html_report.append(f"<h3>{category.capitalize()}:</h3>")
+                    for tech_entry in tech_list:
+                        app = tech_entry.get('app', 'Unknown Technology')
+                        ver = tech_entry.get('ver', 'Unknown Version')
+                        type_ = tech_entry.get('type', 'Unknown Type')
+                        print(f"Application: {app}\nVersion: {ver}\nType: {type_}\n")
+                        html_report.append(f"<p>Application: {app}</p>")
+                        html_report.append(f"<p>Version: {ver}</p>")
+                        html_report.append(f"<p>Type: {type_}</p>")
+                print("\n")
+            else:
+                print("No technologies found.")
+                html_report.append("<p>No technologies found.</p>")
+            return technologies
         else:
             print("Error: Couldn't retrieve technologies.")
+            html_report.append("<p>Error: Couldn't retrieve technologies.</p>")
             return None
 
     except Exception as e:
         print(f"Error: {e}")
+        html_report.append(f"<p>Error: {e}</p>")
         return None
 
-def check_social_media_links(url):
+def check_social_media_links(url, html_report):
     social_media_links = {
         "facebook": "https://www.facebook.com/",
         "instagram": "https://www.instagram.com/",
@@ -268,20 +326,26 @@ def check_social_media_links(url):
                 if social_media_link:
                     social_media_url = social_media_link['href']
                     print(f"Checking {social_media.capitalize()} link: {social_media_url}")
+                    html_report.append(f"<p>Checking {social_media.capitalize()} link: {social_media_url}</p>")
                     if social_media.lower() == "instagram":
-                        check_instagram_link(social_media_url)
+                        check_instagram_link(social_media_url, html_report)
                     else:
-                        check_social_media_link(social_media, social_media_url, user_agents)
+                        check_social_media_link(social_media, social_media_url, user_agents, html_report)
                 else:
                     print(f"No {social_media.capitalize()} link found.")
+                    html_report.append(f"<p>No {social_media.capitalize()} link found.</p>")
         else:
             print(f"Failed to fetch page: {url}")
+            html_report.append(f"<p>Failed to fetch page: {url}</p>")
             print("Unable to check social media links due to an error")
+            html_report.append("<p>Unable to check social media links due to an error</p>")
     except requests.RequestException:
         print("Failed to fetch page. Please check the provided URL.")
+        html_report.append("<p>Failed to fetch page. Please check the provided URL.</p>")
         print("Unable to check social media links due to an error")
+        html_report.append("<p>Unable to check social media links due to an error</p>")
 
-def check_social_media_link(social_media, url, user_agents):
+def check_social_media_link(social_media, url, user_agents, html_report):
     try:
         user_agent = random.choice(user_agents)
         response = requests.head(url, allow_redirects=True, headers={"User-Agent": user_agent})
@@ -289,71 +353,76 @@ def check_social_media_link(social_media, url, user_agents):
             if social_media.lower() == "facebook":
                 if "sorry, this page isn't available" in response.text.lower():
                     print("Broken Facebook Link")
+                    html_report.append("<p>Broken Facebook Link</p>")
             elif social_media.lower() == "linkedin":
                 if "this page doesn't exist" in response.text.lower():
                     print("Broken LinkedIn Link")
+                    html_report.append("<p>Broken LinkedIn Link</p>")
             elif social_media.lower() == "twitter":
                 if "this account doesn't exist" in response.text.lower():
                     print("Broken Twitter Link")
+                    html_report.append("<p>Broken Twitter Link</p>")
             elif social_media.lower() == "github":
                 if "there isn't a GitHub pages site here" in response.text.lower():
                     print("Broken Github Link")
+                    html_report.append("<p>Broken Github Link</p>")
         else:
             print(f"Unable to check {social_media.capitalize()} link due to an error")
+            html_report.append(f"<p>Unable to check {social_media.capitalize()} link due to an error</p>")
     except requests.RequestException:
         print(f"Unable to check {social_media.capitalize()} link due to an error")
+        html_report.append(f"<p>Unable to check {social_media.capitalize()} link due to an error</p>")
 
-def check_instagram_link(url):
+def check_instagram_link(url, html_report):
     try:
         response = requests.get(url)
         if response.status_code == 200:
             soup = BeautifulSoup(response.text, 'html.parser')
-            # Gather the instagram username
             instagram_username = url.split('/')[-1]
-            # Check if the username is in the source code
             if instagram_username in soup.text:
                 print("Instagram account exists")
+                html_report.append("<p>Instagram account exists</p>")
             else:
                 print(f"{bcolors.FAIL}{bcolors.BOLD}Broken Instagram Link{bcolors.ENDC}")
+                html_report.append(f"<p><span style='color:red;'>Broken Instagram Link</span></p>")
         else:
             print("Failed to fetch page.")
+            html_report.append("<p>Failed to fetch page.</p>")
     except requests.RequestException as e:
         print(f"Unable to check Instagram link due to an error: {e}")
+        html_report.append(f"<p>Unable to check Instagram link due to an error: {e}</p>")
 
-
-
-def check_cors_vulnerability(url):
-    # Reflected Origins Test
+def check_cors_vulnerability(url, html_report):
     reflected_origins_response = requests.get(url, headers={"Origin": "https://attackerdomain.com"}, verify=False)
     if "https://attackerdomain.com" in reflected_origins_response.headers.get("Access-Control-Allow-Origin", "") and \
             "true" in reflected_origins_response.headers.get("Access-Control-Allow-Credentials", "").lower():
         print("\033[1m\033[92mReflected Origins Test: Potential CORS \033[0m")
+        html_report.append("<p><span style='color:green;'>Reflected Origins Test: Potential CORS</span></p>")
     else:
         print("\033[1m\033[91mReflected Origins Test: No Potential CORS\033[0m")
+        html_report.append("<p><span style='color:red;'>Reflected Origins Test: No Potential CORS</span></p>")
 
-    # Trusted Subdomains Test
     attacker_domain = url.split("//")[1].split("/")[0]
     trusted_subdomains_response = requests.get(url, headers={"Origin": f"https://attacker.{attacker_domain}"}, verify=False)
     if trusted_subdomains_response.headers.get("Access-Control-Allow-Origin", ""):
         print("\033[1m\033[92mTrusted Subdomains Test: Potential CORS\033[0m")
+        html_report.append("<p><span style='color:green;'>Trusted Subdomains Test: Potential CORS</span></p>")
     else:
         print("\033[1m\033[91mTrusted Subdomains Test: No Potential CORS\033[0m")
+        html_report.append("<p><span style='color:red;'>Trusted Subdomains Test: No Potential CORS</span></p>")
 
-    # Null Origin Test
     null_origin_response = requests.get(url, headers={"Origin": "null"}, verify=False)
     if "null" in null_origin_response.headers.get("Access-Control-Allow-Origin", "") and \
             "true" in null_origin_response.headers.get("Access-Control-Allow-Credentials", "").lower():
         print("\033[1m\033[92mNull Origin Test: Potential CORS\033[0m")
+        html_report.append("<p><span style='color:green;'>Null Origin Test: Potential CORS</span></p>")
     else:
         print("\033[1m\033[91mNull Origin Test: No Potential CORS\033[0m")
+        html_report.append("<p><span style='color:red;'>Null Origin Test: No Potential CORS</span></p>")
 
-def scan_popular_ports(url):
+def scan_popular_ports(url, html_report):
     try:
-        # Remove "http://" or "https://" from the URL if present
-        if url.startswith("http://"):
-            url = url[7:]
-        elif url.startswith("https://"):
-            url = url[8:]
+        url_hostname = urlparse(url).hostname
             
         open_ports = []
 
@@ -368,21 +437,24 @@ def scan_popular_ports(url):
             try:
                 with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
                     s.settimeout(1)
-                    result = s.connect_ex((url, port))
+                    result = s.connect_ex((url_hostname, port))
                     if result == 0:
                         open_ports.append(port)
             except Exception as e:
                 print(f"Error: {e}")
+                html_report.append(f"<p>Error: {e}</p>")
 
         for port in open_ports:
             print(f"Port {port} is open")
+            html_report.append(f"<p>Port {port} is open</p>")
 
     except Exception as e:
         print(f"Error: {e}")
+        html_report.append(f"<p>Error: {e}</p>")
 
-def check_spf(domain):
+def check_spf(domain, html_report):
     try:
-        domain = domain.split("//")[-1].split("/")[0]  # Take only domain name
+        domain = domain.split("//")[-1].split("/")[0]
         answers = dns.resolver.resolve(domain, 'TXT')
         for rdata in answers:
             txt_record = rdata.strings
@@ -393,9 +465,9 @@ def check_spf(domain):
     except dns.resolver.NoAnswer:
         return False
 
-def check_dmarc(domain):
+def check_dmarc(domain, html_report):
     try:
-        domain = domain.split("//")[-1].split("/")[0]  # Take only domain name
+        domain = domain.split("//")[-1].split("/")[0]
         answers = dns.resolver.resolve(f'_dmarc.{domain}', 'TXT')
         for rdata in answers:
             txt_record = rdata.strings
@@ -407,8 +479,8 @@ def check_dmarc(domain):
         return False
     except dns.resolver.NoAnswer:
         return False
-        
-def clickjacking(url):
+
+def clickjacking(url, html_report):
     response = requests.get(url)
     headers = response.headers
     if ('X-Frame-Options' in headers and 
@@ -431,6 +503,7 @@ def clickjacking(url):
         print("HTML file generated: clickjack_test.html")
         print("You can open the file by clicking the link below:")
         print(f"file://{os.getcwd()}/clickjack_test.html")
+        html_report.append("<p>HTML file generated: clickjack_test.html</p>")
         return True
 
 def get_domains_from_file(file_path):
@@ -439,7 +512,74 @@ def get_domains_from_file(file_path):
     urls = [url.strip() for url in urls]
     domains = [urlparse(url).netloc for url in urls]
     return domains
-    
+
+def save_html_report(report, filename):
+    html_template = f"""
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Security Scan Report</title>
+        <style>
+            body {{
+                font-family: Arial, sans-serif;
+                background-color: #f4f4f9;
+                color: #333;
+                margin: 0;
+                padding: 0;
+            }}
+            .container {{
+                width: 80%;
+                margin: auto;
+                overflow: hidden;
+                padding: 20px;
+                background: #fff;
+                margin-top: 20px;
+                box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+            }}
+            h1, h2, h3 {{
+                color: #333;
+                margin-bottom: 20px;
+            }}
+            p {{
+                line-height: 1.6;
+            }}
+            .green {{
+                color: green;
+            }}
+            .red {{
+                color: red;
+            }}
+            .border {{
+                border-bottom: 2px solid #333;
+                padding-bottom: 10px;
+                margin-bottom: 10px;
+            }}
+            .highlight {{
+                background: #fffbcc;
+                padding: 5px;
+                border-radius: 5px;
+                border-left: 5px solid #ffeb3b;
+            }}
+            .result {{
+                margin-bottom: 20px;
+            }}
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <h1>Security Scan Report</h1>
+            {"".join(report)}
+        </div>
+    </body>
+    </html>
+    """
+    with open(filename, 'w') as file:
+        file.write(html_template)
+    report_path = os.path.abspath(filename)
+    print(f"HTML report saved to: {report_path}")
+    print(f"Open the report at: file://{report_path}")
 
 def main():
     try:
@@ -459,12 +599,14 @@ def main():
         parser.add_argument("-dmarc", action="store_true", help="Perform DMARC policy check")
         parser.add_argument("-cjacking", action="store_true", help="Perform clickjacking vulnerability check")
         parser.add_argument("-all", action="store_true", help="Perform all checks")
+        parser.add_argument("-output", type=str, help="Output HTML report to the specified file")
 
         args = parser.parse_args()
-            
+        
+        html_report = []
+
         if args.all and (args.cookie or args.method or args.headers or args.ssl or args.tech or args.social or args.cors or args.ports or args.spf or args.dmarc or args.cjacking):
             parser.error("-all flag can only be used with -file and -url flags")
-
 
         urls = args.url or []  
         if args.file:
@@ -473,7 +615,6 @@ def main():
             if file_contents:
                 urls += file_contents.splitlines()  
 
-
         printed_banner = False
         for url in urls:
             if not printed_banner:  
@@ -481,6 +622,7 @@ def main():
                 printed_banner = True
                 
             print_banner_with_border(f"Checking {url}")
+            html_report.append(f"<div class='border'><h2>Checking {url}</h2></div>")
 
             ip_address = socket.gethostbyname(urlparse(url).hostname)
             hostname = urlparse(url).hostname
@@ -491,90 +633,105 @@ def main():
             print(f"Hostname: {hostname}")
             print(f"Scan Start Time: {start_time.strftime('%Y-%m-%d %H:%M:%S')}\n")
 
+            html_report.append(f"<p><strong>IP Address:</strong> {ip_address}</p>")
+            html_report.append(f"<p><strong>Hostname:</strong> {hostname}</p>")
+            html_report.append(f"<p><strong>Scan Start Time:</strong> {start_time.strftime('%Y-%m-%d %H:%M:%S')}</p>")
+
             if args.ssl or args.all:
                 print_banner_with_border("SSL/TLS Versions")
-                check_ssl_versions(url)
-                check_sslv2_support(url)
-                check_sslv3_support(url)
+                html_report.append("<div class='result'><h3>SSL/TLS Versions</h3>")
+                check_ssl_versions(url, html_report)
+                check_sslv2_support(url, html_report)
+                check_sslv3_support(url, html_report)
+                html_report.append("</div>")
                 print("\n")
 
             if args.cookie or args.all:
                 print_banner_with_border("Cookie Check")
-                get_cookies_from_url(url)
+                html_report.append("<div class='result'><h3>Cookie Check</h3>")
+                get_cookies_from_url(url, html_report)
+                html_report.append("</div>")
                 print("\n")
 
             if args.headers or args.all:
                 print_banner_with_border("Security Headers")
-                result = check_security_headers(url)
-                for header, present in result.items():
-                    if present:
-                        print(header + ":", Fore.GREEN + Style.BRIGHT + "Present" + Style.RESET_ALL)
-                    else:
-                        print(header + ":", Fore.RED + Style.BRIGHT + "Not Present" + Style.RESET_ALL)
+                html_report.append("<div class='result'><h3>Security Headers</h3>")
+                check_security_headers(url, html_report)
+                html_report.append("</div>")
                 print("\n")
 
             if args.method or args.all:
                 print_banner_with_border("HTTP Debugging Methods")
-                debug_result = check_debugging_enabled(url)
+                html_report.append("<div class='result'><h3>HTTP Debugging Methods</h3>")
+                check_debugging_enabled(url, html_report)
+                html_report.append("</div>")
                 print("\n")
 
             if args.tech or args.all:
                 print_banner_with_border("Web Technologies")
-                technologies = get_technologies(url)
-                if technologies:
-                    print("Technologies used in the given website:")
-                    for category, tech_list in technologies.items():
-                        print(f"\n{category.capitalize()}:")
-                        for tech_entry in tech_list:
-                            app = tech_entry.get('app', 'Unknown Technology')
-                            ver = tech_entry.get('ver', 'Unknown Version')
-                            type_ = tech_entry.get('type', 'Unknown Type')
-                            print(f"Application: {app}\nVersion: {ver}\nType: {type_}\n")
-                    print("\n")
-                else:
-                    print("No technologies found.")
-
+                html_report.append("<div class='result'><h3>Web Technologies</h3>")
+                get_technologies(url, html_report)
+                html_report.append("</div>")
+                print("\n")
 
             if args.social or args.all:
                 print_banner_with_border("Broken Link Hijack Check")
-                check_social_media_links(url)
+                html_report.append("<div class='result'><h3>Broken Link Hijack Check</h3>")
+                check_social_media_links(url, html_report)
+                html_report.append("</div>")
                 print("\n")
 
             if args.cors or args.all:
                 print_banner_with_border("CORS Misconfigurations")
-                check_cors_vulnerability(url)
+                html_report.append("<div class='result'><h3>CORS Misconfigurations</h3>")
+                check_cors_vulnerability(url, html_report)
+                html_report.append("</div>")
                 print("\n")
 
             if args.ports or args.all:
                 print_banner_with_border("Port Scan")
-                scan_popular_ports(url)
+                html_report.append("<div class='result'><h3>Port Scan</h3>")
+                scan_popular_ports(url, html_report)
+                html_report.append("</div>")
                 print("\n")
 
             if args.spf or args.all:
                 print_banner_with_border("SPF Policy Check")
-                spf_result = check_spf(url)
+                html_report.append("<div class='result'><h3>SPF Policy Check</h3>")
+                spf_result = check_spf(url, html_report)
                 if spf_result:
-                    print("SPF record have been found")
+                    print(f"{Fore.GREEN + Style.BRIGHT}SPF record have been found{Style.RESET_ALL}")
+                    html_report.append("<p><span style='color:green;'>SPF record have been found</span></p>")
                 else:
-                    print("SPF record have not been found")
+                    print(f"{Fore.RED + Style.BRIGHT}SPF record have not been found{Style.RESET_ALL}")
+                    html_report.append("<p><span style='color:red;'>SPF record have not been found</span></p>")
+                html_report.append("</div>")
                 print("\n")
 
             if args.dmarc or args.all:
                 print_banner_with_border("DMARC Policy Check")
-                dmarc_result = check_dmarc(url)
+                html_report.append("<div class='result'><h3>DMARC Policy Check</h3>")
+                dmarc_result = check_dmarc(url, html_report)
                 if dmarc_result:
-                    print("DMARC record have been found")
+                    print(f"{Fore.GREEN + Style.BRIGHT}DMARC record have been found{Style.RESET_ALL}")
+                    html_report.append("<p><span style='color:green;'>DMARC record have been found</span></p>")
                 else:
-                    print("DMARC record have not been found")
+                    print(f"{Fore.RED + Style.BRIGHT}DMARC record have not been found{Style.RESET_ALL}")
+                    html_report.append("<p><span style='color:red;'>DMARC record have not been found</span></p>")
+                html_report.append("</div>")
                 print("\n")
 
             if args.cjacking or args.all:
                 print_banner_with_border("Clickjacking Check")
-                cjacking_result = clickjacking(url)
+                html_report.append("<div class='result'><h3>Clickjacking Check</h3>")
+                cjacking_result = clickjacking(url, html_report)
                 if cjacking_result:
                     print(f"{Fore.GREEN + Style.BRIGHT}Possibble Clickjacking vulnerability.{Style.RESET_ALL}")
+                    html_report.append("<p><span style='color:green;'>Possible Clickjacking vulnerability.</span></p>")
                 else:
                     print("Clickjacking vulnerability not found.")
+                    html_report.append("<p>Clickjacking vulnerability not found.</p>")
+                html_report.append("</div>")
                 print("\n")
                 
             end_time = datetime.now()
@@ -583,6 +740,11 @@ def main():
             total_seconds = round(total_time.total_seconds(), 1)
             print("Total Scan Time:", total_seconds, "seconds.\n\n\n")
 
+            html_report.append(f"<p><strong>Scan End Time:</strong> {end_time.strftime('%Y-%m-%d %H:%M:%S')}</p>")
+            html_report.append(f"<p><strong>Total Scan Time:</strong> {total_seconds} seconds.</p>")
+
+        if args.output:
+            save_html_report(html_report, args.output)
 
     except KeyboardInterrupt:
         print(f"{bcolors.FAIL + bcolors.BOLD}The scan has been terminated by the user.{Style.RESET_ALL}")
