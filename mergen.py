@@ -633,6 +633,7 @@ def main():
         group = parser.add_mutually_exclusive_group(required=True)
         group.add_argument("-url", nargs="*", type=str, help="URL of the website to be analyzed")
         group.add_argument("-file", type=str, help="File containing URLs to be analyzed")
+        parser.add_argument("-output", type=str, help="Output HTML report to the specified file")
         parser.add_argument("-cookie", action="store_true", help="Enable checking of cookie values")
         parser.add_argument("-method", action="store_true", help="Check which HTTP Debugging methods are enabled")
         parser.add_argument("-headers", action="store_true", help="Enable checking of security headers")
@@ -645,7 +646,6 @@ def main():
         parser.add_argument("-dmarc", action="store_true", help="Perform DMARC policy check")
         parser.add_argument("-cjacking", action="store_true", help="Perform clickjacking vulnerability check")
         parser.add_argument("-all", action="store_true", help="Perform all checks")
-        parser.add_argument("-output", type=str, help="Output HTML report to the specified file")
 
         args = parser.parse_args()
         
