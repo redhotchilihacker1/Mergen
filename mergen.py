@@ -274,18 +274,23 @@ def get_technologies(url, html_report):
             technologies = json.loads(result.stdout)
             if technologies:
                 print("Technologies used in the given website:")
-                html_report.append("<p>Technologies used in the given website:</p>")
+                html_report.append("<div class='result'><h3>Technologies used in the given website:</h3>")
                 for category, tech_list in technologies.items():
                     print(f"\n{category.capitalize()}:")
-                    html_report.append(f"<h3>{category.capitalize()}:</h3>")
+                    html_report.append(f"<h4>{category.capitalize()}:</h4>")
                     for tech_entry in tech_list:
                         app = tech_entry.get('app', 'Unknown Technology')
                         ver = tech_entry.get('ver', 'Unknown Version')
                         type_ = tech_entry.get('type', 'Unknown Type')
                         print(f"Application: {app}\nVersion: {ver}\nType: {type_}\n")
-                        html_report.append(f"<p>Application: {app}</p>")
-                        html_report.append(f"<p>Version: {ver}</p>")
-                        html_report.append(f"<p>Type: {type_}</p>")
+                        html_report.append(f"""
+                            <div class='tech-group'>
+                                <p><strong>Application:</strong> {app}</p>
+                                <p><strong>Version:</strong> {ver}</p>
+                                <p><strong>Type:</strong> {type_}</p>
+                            </div>
+                        """)
+                html_report.append("</div>")
                 print("\n")
             else:
                 print("No technologies found.")
@@ -300,6 +305,7 @@ def get_technologies(url, html_report):
         print(f"Error: {e}")
         html_report.append(f"<p>Error: {e}</p>")
         return None
+
 
 def check_social_media_links(url, html_report):
     social_media_links = {
@@ -520,10 +526,10 @@ def save_html_report(report, filename):
     <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>Security Scan Report</title>
+        <title>Mergen Security Scan Report</title>
         <style>
             body {{
-                font-family: Arial, sans-serif;
+                font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
                 background-color: #f4f4f9;
                 color: #333;
                 margin: 0;
@@ -535,26 +541,38 @@ def save_html_report(report, filename):
                 overflow: hidden;
                 padding: 20px;
                 background: #fff;
-                margin-top: 20px;
+                margin-top: 30px;
+                margin-bottom: 30px;
                 box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+                border-radius: 8px;
             }}
             h1, h2, h3 {{
                 color: #333;
                 margin-bottom: 20px;
+                border-bottom: 2px solid #e0e0e0;
+                padding-bottom: 10px;
             }}
             p {{
                 line-height: 1.6;
+                margin-bottom: 10px;
+            }}
+            .header {{
+                background-color: #4CAF50;
+                color: white;
+                padding: 10px 0;
+                text-align: center;
+                border-radius: 8px 8px 0 0;
+                margin: -20px -20px 20px -20px;
+            }}
+            .header h1 {{
+                margin: 0;
+                font-size: 24px;
             }}
             .green {{
                 color: green;
             }}
             .red {{
                 color: red;
-            }}
-            .border {{
-                border-bottom: 2px solid #333;
-                padding-bottom: 10px;
-                margin-bottom: 10px;
             }}
             .highlight {{
                 background: #fffbcc;
@@ -564,13 +582,41 @@ def save_html_report(report, filename):
             }}
             .result {{
                 margin-bottom: 20px;
+                padding: 15px;
+                border: 1px solid #e0e0e0;
+                border-radius: 5px;
+                background: #fafafa;
+            }}
+            .result h3 {{
+                margin-top: 0;
+            }}
+            .footer {{
+                text-align: center;
+                padding: 10px;
+                font-size: 12px;
+                color: #666;
+            }}
+            .footer a {{
+                color: #4CAF50;
+                text-decoration: none;
+            }}
+            .tech-group {{
+                margin-bottom: 20px; 
+            }}
+            .tech-group p {{
+                margin: 5px 0;
             }}
         </style>
     </head>
     <body>
         <div class="container">
-            <h1>Security Scan Report</h1>
+            <div class="header">
+                <h1>Mergen Security Scan Report</h1>
+            </div>
             {"".join(report)}
+            <div class="footer">
+                <p>Report generated by Mergen Security Scan Tool. <a href="file://{os.path.abspath(filename)}">Open the report</a></p>
+            </div>
         </div>
     </body>
     </html>
@@ -622,7 +668,7 @@ def main():
                 printed_banner = True
                 
             print_banner_with_border(f"Checking {url}")
-            html_report.append(f"<div class='border'><h2>Checking {url}</h2></div>")
+            html_report.append(f"<div class='border'><h2>Scan Results For: {url}</h2></div>")
 
             ip_address = socket.gethostbyname(urlparse(url).hostname)
             hostname = urlparse(url).hostname
@@ -741,7 +787,7 @@ def main():
             print("Total Scan Time:", total_seconds, "seconds.\n\n\n")
 
             html_report.append(f"<p><strong>Scan End Time:</strong> {end_time.strftime('%Y-%m-%d %H:%M:%S')}</p>")
-            html_report.append(f"<p><strong>Total Scan Time:</strong> {total_seconds} seconds.</p>")
+            html_report.append(f"<p><strong>Total Scan Time:</strong> {total_seconds} seconds.</p><br><br>")
 
         if args.output:
             save_html_report(html_report, args.output)
