@@ -1,6 +1,9 @@
-colorama
 requests
-beautifulsoup4
-instagramy
+urllib3
 dnspython
+beautifulsoup4
+colorama
+instagramy
+selenium
+webdriver_manager
 wad
