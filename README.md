@@ -46,7 +46,7 @@ options:
   -url [URL ...]  URL of the website to be analyzed
   -file FILE      File containing URLs to be analyzed
   -cookie         Enable checking of cookie values
-  -method         Check if HTTP DEBUG method is enabled
+  -method         Check which HTTP Debugging methods are enabled
   -headers        Enable checking of security headers
   -ssl            Enable checking of SSL/TLS versions
   -tech           Identify web technologies used
@@ -56,7 +56,10 @@ options:
   -spf            Perform SPF policy check
   -dmarc          Perform DMARC policy check
   -cjacking       Perform clickjacking vulnerability check
+  -response       Get response information without source code
+  -sshot          Take a screenshot of the website
   -all            Perform all checks
+  -output OUTPUT  Output HTML report to the specified file
 ```
 
 ## Special Thanks
