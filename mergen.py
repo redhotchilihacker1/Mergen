@@ -17,6 +17,9 @@ from colorama import Fore, Style
 from urllib.parse import urlparse
 from instagramy import InstagramUser
 from requests.exceptions import SSLError
+from selenium import webdriver
+from selenium.webdriver.chrome.service import Service
+from webdriver_manager.chrome import ChromeDriverManager
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
@@ -170,30 +173,30 @@ def check_debugging_enabled(url, html_report):
         headers = {'Command': 'stop-debug'}
         response = requests.request('DEBUG', url, headers=headers, verify=False)
         if response.status_code == 200 and 'OK' in response.text:
-            print(f"{Fore.GREEN + Style.BRIGHT}HTTP DEBUG is enabled.{Style.RESET_ALL}")
+            print(f"{Fore.RED + Style.BRIGHT}HTTP DEBUG is enabled.{Style.RESET_ALL}")
             html_report.append(f"<p><span style='color:green;'>HTTP DEBUG is enabled.</span></p>")
         elif response.status_code == 405:
-            print(f"{Fore.RED + Style.BRIGHT}HTTP DEBUG method is not enabled.{Style.RESET_ALL}")
+            print(f"{Fore.GREEN + Style.BRIGHT}HTTP DEBUG method is not enabled.{Style.RESET_ALL}")
             html_report.append(f"<p><span style='color:red;'>HTTP DEBUG method is not enabled.</span></p>")
         elif response.status_code == 501:
-            print(f"{Fore.RED + Style.BRIGHT}Host doesn't support HTTP DEBUG method.{Style.RESET_ALL}")
+            print(f"{Fore.GREEN + Style.BRIGHT}Host doesn't support HTTP DEBUG method.{Style.RESET_ALL}")
             html_report.append(f"<p><span style='color:red;'>Host doesn't support HTTP DEBUG method.</span></p>")
         else:
-            print(f"{Fore.RED + Style.BRIGHT}Unexpected status code: {response.status_code}.{Style.RESET_ALL}")
+            print(f"{Fore.GREEN + Style.BRIGHT}Unexpected status code: {response.status_code}.{Style.RESET_ALL}")
             html_report.append(f"<p><span style='color:red;'>Unexpected status code: {response.status_code}.</span></p>")
             
         if ('allow' in response.headers and 'TRACE' in response.headers['allow']) or ('public' in response.headers and 'TRACE' in response.headers['public']):
-            print(f"{Fore.GREEN + Style.BRIGHT}TRACE method is allowed.{Style.RESET_ALL}")
+            print(f"{Fore.RED + Style.BRIGHT}TRACE method is allowed.{Style.RESET_ALL}")
             html_report.append(f"<p><span style='color:green;'>TRACE method is allowed.</span></p>")
         else:
-            print(f"{Fore.RED + Style.BRIGHT}TRACE method is not allowed.{Style.RESET_ALL}")
+            print(f"{Fore.GREEN + Style.BRIGHT}TRACE method is not allowed.{Style.RESET_ALL}")
             html_report.append(f"<p><span style='color:red;'>TRACE method is not allowed.</span></p>")
 
         if ('allow' in response.headers and 'TRACK' in response.headers['allow']) or ('public' in response.headers and 'TRACK' in response.headers['public']):
-            print(f"{Fore.GREEN + Style.BRIGHT}TRACK method is allowed.{Style.RESET_ALL}")
+            print(f"{Fore.RED + Style.BRIGHT}TRACK method is allowed.{Style.RESET_ALL}")
             html_report.append(f"<p><span style='color:green;'>TRACK method is allowed.</span></p>")
         else:
-            print(f"{Fore.RED + Style.BRIGHT}TRACK method is not allowed.{Style.RESET_ALL}")
+            print(f"{Fore.GREEN + Style.BRIGHT}TRACK method is not allowed.{Style.RESET_ALL}")
             html_report.append(f"<p><span style='color:red;'>TRACK method is not allowed.</span></p>")
     
     except requests.exceptions.RequestException as e:
@@ -291,7 +294,7 @@ def get_technologies(url, html_report):
                             </div>
                         """)
                 html_report.append("</div>")
-                print("\n")
+#                print("\n")
             else:
                 print("No technologies found.")
                 html_report.append("<p>No technologies found.</p>")
@@ -402,29 +405,29 @@ def check_cors_vulnerability(url, html_report):
     reflected_origins_response = requests.get(url, headers={"Origin": "https://attackerdomain.com"}, verify=False)
     if "https://attackerdomain.com" in reflected_origins_response.headers.get("Access-Control-Allow-Origin", "") and \
             "true" in reflected_origins_response.headers.get("Access-Control-Allow-Credentials", "").lower():
-        print("\033[1m\033[92mReflected Origins Test: Potential CORS \033[0m")
-        html_report.append("<p><span style='color:green;'>Reflected Origins Test: Potential CORS</span></p>")
+        print("\033[1m\033[921mReflected Origins Test: Potential CORS \033[0m")
+        html_report.append("<p><span style='color:red;'>Reflected Origins Test: Potential CORS</span></p>")
     else:
-        print("\033[1m\033[91mReflected Origins Test: No Potential CORS\033[0m")
-        html_report.append("<p><span style='color:red;'>Reflected Origins Test: No Potential CORS</span></p>")
+        print("\033[1m\033[92mReflected Origins Test: No Potential CORS\033[0m")
+        html_report.append("<p><span style='color:green;'>Reflected Origins Test: No Potential CORS</span></p>")
 
     attacker_domain = url.split("//")[1].split("/")[0]
     trusted_subdomains_response = requests.get(url, headers={"Origin": f"https://attacker.{attacker_domain}"}, verify=False)
     if trusted_subdomains_response.headers.get("Access-Control-Allow-Origin", ""):
-        print("\033[1m\033[92mTrusted Subdomains Test: Potential CORS\033[0m")
-        html_report.append("<p><span style='color:green;'>Trusted Subdomains Test: Potential CORS</span></p>")
+        print("\033[1m\033[91mTrusted Subdomains Test: Potential CORS\033[0m")
+        html_report.append("<p><span style='color:red;'>Trusted Subdomains Test: Potential CORS</span></p>")
     else:
-        print("\033[1m\033[91mTrusted Subdomains Test: No Potential CORS\033[0m")
-        html_report.append("<p><span style='color:red;'>Trusted Subdomains Test: No Potential CORS</span></p>")
+        print("\033[1m\033[92mTrusted Subdomains Test: No Potential CORS\033[0m")
+        html_report.append("<p><span style='color:green;'>Trusted Subdomains Test: No Potential CORS</span></p>")
 
     null_origin_response = requests.get(url, headers={"Origin": "null"}, verify=False)
     if "null" in null_origin_response.headers.get("Access-Control-Allow-Origin", "") and \
             "true" in null_origin_response.headers.get("Access-Control-Allow-Credentials", "").lower():
-        print("\033[1m\033[92mNull Origin Test: Potential CORS\033[0m")
-        html_report.append("<p><span style='color:green;'>Null Origin Test: Potential CORS</span></p>")
+        print("\033[1m\033[91mNull Origin Test: Potential CORS\033[0m")
+        html_report.append("<p><span style='color:red;'>Null Origin Test: Potential CORS</span></p>")
     else:
-        print("\033[1m\033[91mNull Origin Test: No Potential CORS\033[0m")
-        html_report.append("<p><span style='color:red;'>Null Origin Test: No Potential CORS</span></p>")
+        print("\033[1m\033[92mNull Origin Test: No Potential CORS\033[0m")
+        html_report.append("<p><span style='color:green;'>Null Origin Test: No Potential CORS</span></p>")
 
 def scan_popular_ports(url, html_report):
     try:
@@ -526,7 +529,7 @@ def save_html_report(report, filename):
     <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>Mergen Security Scan Report</title>
+        <title>Security Scan Report</title>
         <style>
             body {{
                 font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
@@ -551,6 +554,12 @@ def save_html_report(report, filename):
                 margin-bottom: 20px;
                 border-bottom: 2px solid #e0e0e0;
                 padding-bottom: 10px;
+            }}
+            h4 {{
+                color: #333;
+                margin-bottom: 10px;
+                border-bottom: 1px solid #e0e0e0;
+                padding-bottom: 5px;
             }}
             p {{
                 line-height: 1.6;
@@ -589,6 +598,17 @@ def save_html_report(report, filename):
             }}
             .result h3 {{
                 margin-top: 0;
+                cursor: pointer;
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+            }}
+            .result h3 .title {{
+                flex-grow: 1;
+            }}
+            .result h3 .toggle-icon {{
+                font-size: 14px;
+                margin-left: 10px;
             }}
             .footer {{
                 text-align: center;
@@ -601,21 +621,42 @@ def save_html_report(report, filename):
                 text-decoration: none;
             }}
             .tech-group {{
-                margin-bottom: 20px; 
+                margin-bottom: 20px;
             }}
             .tech-group p {{
                 margin: 5px 0;
             }}
+            .content {{
+                display: none;
+            }}
         </style>
+        <script>
+            document.addEventListener('DOMContentLoaded', (event) => {{
+                const contents = document.querySelectorAll('.content');
+                contents.forEach(content => {{
+                    content.style.display = 'none';
+                }});
+                const headers = document.querySelectorAll('.result h3');
+                headers.forEach(header => {{
+                    const toggleIcon = header.querySelector('.toggle-icon');
+                    header.addEventListener('click', () => {{
+                        const content = header.nextElementSibling;
+                        const isOpen = content.style.display === 'block';
+                        content.style.display = isOpen ? 'none' : 'block';
+                        toggleIcon.textContent = isOpen ? '+' : '-';
+                    }});
+                }});
+            }});
+        </script>
     </head>
     <body>
         <div class="container">
             <div class="header">
-                <h1>Mergen Security Scan Report</h1>
+                <h1>Security Scan Report</h1>
             </div>
             {"".join(report)}
             <div class="footer">
-                <p>Report generated by Mergen Security Scan Tool. <a href="file://{os.path.abspath(filename)}">Open the report</a></p>
+                <p>Report generated by Security Scan Tool. <a href="file://{os.path.abspath(filename)}">Open the report</a></p>
             </div>
         </div>
     </body>
@@ -627,13 +668,99 @@ def save_html_report(report, filename):
     print(f"HTML report saved to: {report_path}")
     print(f"Open the report at: file://{report_path}")
 
+    
+def check_response_info(url, html_report):
+    try:
+        response = requests.get(url, verify=False)
+        status_code = response.status_code
+        headers = response.headers
+
+        # Information Disclosure Vulnerability Check
+        info_disclosure_headers = ["server", "x-powered-by", "x-aspnet-version", "x-aspnetmvc-version"]
+        vulnerabilities = {}
+
+        for header, value in headers.items():
+            if header.lower() in info_disclosure_headers:
+                vulnerabilities[header] = value
+
+        # Terminal output
+        print(f"\nResponse Information for {url}:")
+        print(f"{'='*40}")
+        print(f"Status Code: {status_code}")
+        print(f"{'-'*40}")
+        print("Headers:")
+        for header, value in headers.items():
+            if header in vulnerabilities:
+                print(f"\033[91m\033[1m{header}: {value}\033[0m")  # Bold red in terminal
+            else:
+                print(f"{header}: {value}")
+        print(f"\n{'='*40}")
+
+        if vulnerabilities:
+            print(f"\nInformation Disclosure Vulnerabilities found in headers for {url}:")
+            for header, value in vulnerabilities.items():
+                print(f"\033[91m\033[1m{header}: {value}\033[0m")  # Bold red in terminal
+            print(f"\n{'='*40}")
+
+        # HTML report output
+        html_report.append("<div class='result'><h3>Response Information</h3>")
+        html_report.append(f"<p><strong>Status Code:</strong> {status_code}</p>")
+        html_report.append("<p><strong>Headers:</strong></p>")
+        html_report.append("<ul>")
+        for header, value in headers.items():
+            if header in vulnerabilities:
+                html_report.append(f"<li><strong style='color:red;'>{header}:</strong> {value}</li>")  # Bold red in HTML
+            else:
+                html_report.append(f"<li><strong>{header}:</strong> {value}</li>")
+        html_report.append("</ul>")
+        
+        if vulnerabilities:
+            html_report.append("<p><strong>Information Disclosure Vulnerabilities:</strong></p>")
+            html_report.append("<ul>")
+            for header, value in vulnerabilities.items():
+                html_report.append(f"<li><strong style='color:red;'>{header}:</strong> {value}</li>")  # Bold red in HTML
+            html_report.append("</ul>")
+        
+        html_report.append("</div>")
+    except Exception as e:
+        # Terminal output
+        print(f"Error retrieving response information for {url}: {e}")
+
+        # HTML report output
+        html_report.append(f"<p><strong>Error:</strong> {e}</p>")
+
+def take_screenshot(url, output_folder='screenshots'):
+    # Remove "http://" or "https://" from the URL for the file name
+    file_name = url.replace("http://", "").replace("https://", "").replace("/", "_")
+    if not os.path.exists(output_folder):
+        os.makedirs(output_folder)
+    file_path = os.path.join(output_folder, f"{file_name}.png")
+    
+    # Set up Selenium with Chrome
+    options = webdriver.ChromeOptions()
+    options.add_argument('--headless')
+    options.add_argument('--no-sandbox')
+    options.add_argument('--disable-dev-shm-usage')
+    driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=options)
+
+    try:
+        driver.get(url)
+        driver.save_screenshot(file_path)
+        print(f"Screenshot saved for {url} at {file_path}")
+    except Exception as e:
+        print(f"Error taking screenshot for {url}: {e}")
+    finally:
+        driver.quit()
+    return file_path
+
+
+
 def main():
     try:
         parser = argparse.ArgumentParser(description="This script performs various security checks on a given website.")
         group = parser.add_mutually_exclusive_group(required=True)
         group.add_argument("-url", nargs="*", type=str, help="URL of the website to be analyzed")
         group.add_argument("-file", type=str, help="File containing URLs to be analyzed")
-        parser.add_argument("-output", type=str, help="Output HTML report to the specified file")
         parser.add_argument("-cookie", action="store_true", help="Enable checking of cookie values")
         parser.add_argument("-method", action="store_true", help="Check which HTTP Debugging methods are enabled")
         parser.add_argument("-headers", action="store_true", help="Enable checking of security headers")
@@ -645,13 +772,16 @@ def main():
         parser.add_argument("-spf", action="store_true", help="Perform SPF policy check")
         parser.add_argument("-dmarc", action="store_true", help="Perform DMARC policy check")
         parser.add_argument("-cjacking", action="store_true", help="Perform clickjacking vulnerability check")
+        parser.add_argument("-response", action="store_true", help="Get response information without source code")
+        parser.add_argument("-sshot", action="store_true", help="Take a screenshot of the website")
         parser.add_argument("-all", action="store_true", help="Perform all checks")
+        parser.add_argument("-output", type=str, help="Output HTML report to the specified file")
 
         args = parser.parse_args()
         
         html_report = []
 
-        if args.all and (args.cookie or args.method or args.headers or args.ssl or args.tech or args.social or args.cors or args.ports or args.spf or args.dmarc or args.cjacking):
+        if args.all and (args.cookie or args.method or args.headers or args.ssl or args.tech or args.social or args.cors or args.ports or args.spf or args.dmarc or args.cjacking or args.response):
             parser.error("-all flag can only be used with -file and -url flags")
 
         urls = args.url or []  
@@ -668,7 +798,7 @@ def main():
                 printed_banner = True
                 
             print_banner_with_border(f"Checking {url}")
-            html_report.append(f"<div class='border'><h2>Scan Results For: {url}</h2></div>")
+            html_report.append(f"<div class='border'><h2>Checking {url}</h2></div>")
 
             ip_address = socket.gethostbyname(urlparse(url).hostname)
             hostname = urlparse(url).hostname
@@ -685,65 +815,74 @@ def main():
 
             if args.ssl or args.all:
                 print_banner_with_border("SSL/TLS Versions")
-                html_report.append("<div class='result'><h3>SSL/TLS Versions</h3>")
+                html_report.append("<div class='result'><h3><span class='title'>SSL/TLS Versions</span><span class='toggle-icon'>+</span></h3>")
+                html_report.append("<div class='content'>")
                 check_ssl_versions(url, html_report)
                 check_sslv2_support(url, html_report)
                 check_sslv3_support(url, html_report)
-                html_report.append("</div>")
+                html_report.append("</div></div>")
                 print("\n")
 
             if args.cookie or args.all:
                 print_banner_with_border("Cookie Check")
-                html_report.append("<div class='result'><h3>Cookie Check</h3>")
+                html_report.append("<div class='result'><h3><span class='title'>Cookie Check</span><span class='toggle-icon'>+</span></h3>")
+                html_report.append("<div class='content'>")
                 get_cookies_from_url(url, html_report)
-                html_report.append("</div>")
+                html_report.append("</div></div>")
                 print("\n")
 
             if args.headers or args.all:
                 print_banner_with_border("Security Headers")
-                html_report.append("<div class='result'><h3>Security Headers</h3>")
+                html_report.append("<div class='result'><h3><span class='title'>Security Headers</span><span class='toggle-icon'>+</span></h3>")
+                html_report.append("<div class='content'>")
                 check_security_headers(url, html_report)
-                html_report.append("</div>")
+                html_report.append("</div></div>")
                 print("\n")
 
             if args.method or args.all:
                 print_banner_with_border("HTTP Debugging Methods")
-                html_report.append("<div class='result'><h3>HTTP Debugging Methods</h3>")
+                html_report.append("<div class='result'><h3><span class='title'>HTTP Debugging Methods</span><span class='toggle-icon'>+</span></h3>")
+                html_report.append("<div class='content'>")
                 check_debugging_enabled(url, html_report)
-                html_report.append("</div>")
+                html_report.append("</div></div>")
                 print("\n")
 
             if args.tech or args.all:
                 print_banner_with_border("Web Technologies")
-                html_report.append("<div class='result'><h3>Web Technologies</h3>")
+                html_report.append("<div class='result'><h3><span class='title'>Web Technologies</span><span class='toggle-icon'>+</span></h3>")
+                html_report.append("<div class='content'>")
                 get_technologies(url, html_report)
-                html_report.append("</div>")
+                html_report.append("</div></div>")
                 print("\n")
 
             if args.social or args.all:
                 print_banner_with_border("Broken Link Hijack Check")
-                html_report.append("<div class='result'><h3>Broken Link Hijack Check</h3>")
+                html_report.append("<div class='result'><h3><span class='title'>Broken Link Hijack Check</span><span class='toggle-icon'>+</span></h3>")
+                html_report.append("<div class='content'>")
                 check_social_media_links(url, html_report)
-                html_report.append("</div>")
+                html_report.append("</div></div>")
                 print("\n")
 
             if args.cors or args.all:
                 print_banner_with_border("CORS Misconfigurations")
-                html_report.append("<div class='result'><h3>CORS Misconfigurations</h3>")
+                html_report.append("<div class='result'><h3><span class='title'>CORS Misconfigurations</span><span class='toggle-icon'>+</span></h3>")
+                html_report.append("<div class='content'>")
                 check_cors_vulnerability(url, html_report)
-                html_report.append("</div>")
+                html_report.append("</div></div>")
                 print("\n")
 
             if args.ports or args.all:
                 print_banner_with_border("Port Scan")
-                html_report.append("<div class='result'><h3>Port Scan</h3>")
+                html_report.append("<div class='result'><h3><span class='title'>Port Scan</span><span class='toggle-icon'>+</span></h3>")
+                html_report.append("<div class='content'>")
                 scan_popular_ports(url, html_report)
-                html_report.append("</div>")
+                html_report.append("</div></div>")
                 print("\n")
 
             if args.spf or args.all:
                 print_banner_with_border("SPF Policy Check")
-                html_report.append("<div class='result'><h3>SPF Policy Check</h3>")
+                html_report.append("<div class='result'><h3><span class='title'>SPF Policy Check</span><span class='toggle-icon'>+</span></h3>")
+                html_report.append("<div class='content'>")
                 spf_result = check_spf(url, html_report)
                 if spf_result:
                     print(f"{Fore.GREEN + Style.BRIGHT}SPF record have been found{Style.RESET_ALL}")
@@ -751,12 +890,13 @@ def main():
                 else:
                     print(f"{Fore.RED + Style.BRIGHT}SPF record have not been found{Style.RESET_ALL}")
                     html_report.append("<p><span style='color:red;'>SPF record have not been found</span></p>")
-                html_report.append("</div>")
+                html_report.append("</div></div>")
                 print("\n")
 
             if args.dmarc or args.all:
                 print_banner_with_border("DMARC Policy Check")
-                html_report.append("<div class='result'><h3>DMARC Policy Check</h3>")
+                html_report.append("<div class='result'><h3><span class='title'>DMARC Policy Check</span><span class='toggle-icon'>+</span></h3>")
+                html_report.append("<div class='content'>")
                 dmarc_result = check_dmarc(url, html_report)
                 if dmarc_result:
                     print(f"{Fore.GREEN + Style.BRIGHT}DMARC record have been found{Style.RESET_ALL}")
@@ -764,22 +904,41 @@ def main():
                 else:
                     print(f"{Fore.RED + Style.BRIGHT}DMARC record have not been found{Style.RESET_ALL}")
                     html_report.append("<p><span style='color:red;'>DMARC record have not been found</span></p>")
-                html_report.append("</div>")
+                html_report.append("</div></div>")
                 print("\n")
 
             if args.cjacking or args.all:
                 print_banner_with_border("Clickjacking Check")
-                html_report.append("<div class='result'><h3>Clickjacking Check</h3>")
+                html_report.append("<div class='result'><h3><span class='title'>Clickjacking Check</span><span class='toggle-icon'>+</span></h3>")
+                html_report.append("<div class='content'>")
                 cjacking_result = clickjacking(url, html_report)
                 if cjacking_result:
-                    print(f"{Fore.GREEN + Style.BRIGHT}Possibble Clickjacking vulnerability.{Style.RESET_ALL}")
-                    html_report.append("<p><span style='color:green;'>Possible Clickjacking vulnerability.</span></p>")
+                    print(f"{Fore.RED + Style.BRIGHT}Possible Clickjacking vulnerability.{Style.RESET_ALL}")
+                    html_report.append("<p><span style='color:red;'>Possible Clickjacking vulnerability.</span></p>")
                 else:
-                    print("Clickjacking vulnerability not found.")
-                    html_report.append("<p>Clickjacking vulnerability not found.</p>")
-                html_report.append("</div>")
+                    print(f"{Fore.GREEN + Style.BRIGHT}Clickjacking vulnerability not found.{Style.RESET_ALL}")
+                    html_report.append("<p><span style='color:green;'>Clickjacking vulnerability not found.</span></p>")
+                html_report.append("</div></div>")
                 print("\n")
                 
+            if args.response or args.all:
+                html_report.append("<div class='result'><h3><span class='title'>Response Information</span><span class='toggle-icon'>+</span></h3>")
+                html_report.append("<div class='content'>")
+                print_banner_with_border("Response Information")
+                check_response_info(url, html_report)
+                html_report.append("</div></div>")
+                print("\n")
+                
+            if args.sshot or args.all:
+                print_banner_with_border("Screenshot")
+                html_report.append("<div class='result'><h3><span class='title'>Screenshot</span><span class='toggle-icon'>+</span></h3>")
+                html_report.append("<div class='content'>")
+                screenshot_path = take_screenshot(url)
+                html_report.append(f"<p><strong>Screenshot saved at:</strong> <a href='{screenshot_path}'>{screenshot_path}</a></p>")
+                html_report.append(f"<img src='{screenshot_path}' alt='Screenshot of {url}' style='width: 100%; max-width: 600px;'>")
+                html_report.append("</div></div>")
+                print("\n")
+
             end_time = datetime.now()
             print(f"Scan End Time: {end_time.strftime('%Y-%m-%d %H:%M:%S')}")
             total_time = end_time - start_time
