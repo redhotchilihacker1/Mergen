@@ -849,7 +849,7 @@ def main():
         parser.add_argument("-method", action="store_true", help="Check which HTTP Debugging methods are enabled")
         parser.add_argument("-headers", action="store_true", help="Enable checking of security headers")
         parser.add_argument("-ssl", action="store_true", help="Enable checking of SSL/TTLS versions")
-        parser.add_argument("-tech", action="store_true", help="Identify web technologies used")
+        parser.add_argument("-tech", action="store_true", help="Identify web technologies used and find assigned CVE's")
         parser.add_argument("-social", action="store_true", help="Check social media links on the website")
         parser.add_argument("-cors", action="store_true", help="Check for CORS vulnerabilities on the website")
         parser.add_argument("-ports", action="store_true", help="Scan for popular ports")
