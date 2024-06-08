@@ -11,6 +11,7 @@ import dns.resolver
 import os
 import hashlib
 import shutil
+import base64
 from bs4 import BeautifulSoup
 from datetime import datetime
 from colorama import Fore, Style
@@ -174,15 +175,15 @@ def check_debugging_enabled(url, html_report):
         response = requests.request('DEBUG', url, headers=headers, verify=False)
         if response.status_code == 200 and 'OK' in response.text:
             print(f"{Fore.RED + Style.BRIGHT}HTTP DEBUG is enabled.{Style.RESET_ALL}")
-            html_report.append(f"<p><span style='color:green;'>HTTP DEBUG is enabled.</span></p>")
+            html_report.append(f"<p><span style='color:red;'>HTTP DEBUG is enabled.</span></p>")
         elif response.status_code == 405:
             print(f"{Fore.GREEN + Style.BRIGHT}HTTP DEBUG method is not enabled.{Style.RESET_ALL}")
-            html_report.append(f"<p><span style='color:red;'>HTTP DEBUG method is not enabled.</span></p>")
+            html_report.append(f"<p><span style='color:green;'>HTTP DEBUG method is not enabled.</span></p>")
         elif response.status_code == 501:
             print(f"{Fore.GREEN + Style.BRIGHT}Host doesn't support HTTP DEBUG method.{Style.RESET_ALL}")
-            html_report.append(f"<p><span style='color:red;'>Host doesn't support HTTP DEBUG method.</span></p>")
+            html_report.append(f"<p><span style='color:green;'>Host doesn't support HTTP DEBUG method.</span></p>")
         else:
-            print(f"{Fore.GREEN + Style.BRIGHT}Unexpected status code: {response.status_code}.{Style.RESET_ALL}")
+            print(f"{Fore.RED + Style.BRIGHT}Unexpected status code: {response.status_code}.{Style.RESET_ALL}")
             html_report.append(f"<p><span style='color:red;'>Unexpected status code: {response.status_code}.</span></p>")
             
         if ('allow' in response.headers and 'TRACE' in response.headers['allow']) or ('public' in response.headers and 'TRACE' in response.headers['public']):
@@ -190,14 +191,14 @@ def check_debugging_enabled(url, html_report):
             html_report.append(f"<p><span style='color:green;'>TRACE method is allowed.</span></p>")
         else:
             print(f"{Fore.GREEN + Style.BRIGHT}TRACE method is not allowed.{Style.RESET_ALL}")
-            html_report.append(f"<p><span style='color:red;'>TRACE method is not allowed.</span></p>")
+            html_report.append(f"<p><span style='color:green;'>TRACE method is not allowed.</span></p>")
 
         if ('allow' in response.headers and 'TRACK' in response.headers['allow']) or ('public' in response.headers and 'TRACK' in response.headers['public']):
             print(f"{Fore.RED + Style.BRIGHT}TRACK method is allowed.{Style.RESET_ALL}")
-            html_report.append(f"<p><span style='color:green;'>TRACK method is allowed.</span></p>")
+            html_report.append(f"<p><span style='color:red;'>TRACK method is allowed.</span></p>")
         else:
             print(f"{Fore.GREEN + Style.BRIGHT}TRACK method is not allowed.{Style.RESET_ALL}")
-            html_report.append(f"<p><span style='color:red;'>TRACK method is not allowed.</span></p>")
+            html_report.append(f"<p><span style='color:green;'>TRACK method is not allowed.</span></p>")
     
     except requests.exceptions.RequestException as e:
         print(f"{Fore.RED + Style.BRIGHT}Error: {e}{Style.RESET_ALL}")
@@ -278,12 +279,15 @@ def get_technologies(url, html_report):
             if technologies:
                 print("Technologies used in the given website:")
                 html_report.append("<div class='result'><h3>Technologies used in the given website:</h3>")
+                
+                tech_info = []
+
                 for category, tech_list in technologies.items():
                     print(f"\n{category.capitalize()}:")
                     html_report.append(f"<h4>{category.capitalize()}:</h4>")
                     for tech_entry in tech_list:
                         app = tech_entry.get('app', 'Unknown Technology')
-                        ver = tech_entry.get('ver', 'Unknown Version')
+                        ver = tech_entry.get('ver', 'None')
                         type_ = tech_entry.get('type', 'Unknown Type')
                         print(f"Application: {app}\nVersion: {ver}\nType: {type_}\n")
                         html_report.append(f"""
@@ -293,8 +297,45 @@ def get_technologies(url, html_report):
                                 <p><strong>Type:</strong> {type_}</p>
                             </div>
                         """)
+
+                        if ver and ver.lower() != 'none':
+                            tech_info.append((app, ver))
+
                 html_report.append("</div>")
-#                print("\n")
+
+                print("\n=== CVE Results ===")
+                html_report.append("<div class='result'><h3>CVE Results</h3>")
+                for app, ver in tech_info:
+                    query = f"{app}+{ver}"
+                    cve_url = f"https://www.opencve.io/cve?tag=&cvss=&search={query}"
+                    headers = {
+                        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3"
+                    }
+
+                    response = requests.get(cve_url, headers=headers)
+                    response.raise_for_status()  # Kötü durum kodları için hata ver
+
+                    soup = BeautifulSoup(response.text, 'html.parser')
+                    cve_tags = soup.find_all('a', href=True)
+
+                    cve_ids = [tag for tag in cve_tags if tag.text.startswith('CVE-')]
+
+                    print(f"\nCVE Codes for {app} {ver}:")
+                    html_report.append(f"<div class='tech-group'><h4>CVE Codes for {app} {ver}:</h4>")
+                    
+                    if not cve_ids:
+                        print("No CVEs found for the specified product and version.")
+                        html_report.append("<p>No CVEs found for the specified product and version.</p>")
+                    else:
+                        for cve_tag in cve_ids:
+                            cve_id = cve_tag.text
+                            cve_link = f"https://www.opencve.io{cve_tag['href']}"
+                            print(f"{cve_id}: {cve_link}")
+                            html_report.append(f"<p>{cve_id}: <a href='{cve_link}'>{cve_link}</a></p>")
+                    
+                    html_report.append("</div>")
+                html_report.append("</div>")
+
             else:
                 print("No technologies found.")
                 html_report.append("<p>No technologies found.</p>")
@@ -729,13 +770,53 @@ def check_response_info(url, html_report):
         # HTML report output
         html_report.append(f"<p><strong>Error:</strong> {e}</p>")
 
-def take_screenshot(url, output_folder='screenshots'):
+def check_default_page(url, html_report):
+    try:
+        response = requests.get(url)
+        
+        if response.status_code == 200:
+            content = response.text.lower()
+            default_page_indicators = [
+                "welcome to nginx",
+                "it works!",
+                "apache2 ubuntu default page",
+                "iis windows server",
+                "index of /",
+                "default web site page",
+                "test page for apache installation",
+                "congratulations! your website is up and running.",
+                "this is the default welcome page",
+                "nginx on debian",
+                "your new web server is ready to use.",
+                "the web server software is running but no content has been added",
+                "default home page",
+                "this page is used to test the proper operation of the apache http server",
+                "your apache installation is working properly",
+                "powered by centos",
+                "this is a placeholder for the home page",
+                "default page",
+                "web server default page",
+                "this is the default index page of a new domain",
+                "your hosting is set up"
+            ]
+            
+            for indicator in default_page_indicators:
+                if indicator in content:
+                    html_report.append(f"<p>Found default page indicator: '{indicator}'</p>")
+                    return True, f"Found default page indicator: '{indicator}'"
+        
+        return False, "No default page indicator found."
+    except requests.RequestException as e:
+        html_report.append(f"<p>Error occurred: {str(e)}</p>")
+        return False, f"Error occurred: {str(e)}"
+
+
+
+def take_screenshot(url):
     # Remove "http://" or "https://" from the URL for the file name
     file_name = url.replace("http://", "").replace("https://", "").replace("/", "_")
-    if not os.path.exists(output_folder):
-        os.makedirs(output_folder)
-    file_path = os.path.join(output_folder, f"{file_name}.png")
-    
+    file_path = f"{file_name}.png"
+
     # Set up Selenium with Chrome
     options = webdriver.ChromeOptions()
     options.add_argument('--headless')
@@ -746,12 +827,15 @@ def take_screenshot(url, output_folder='screenshots'):
     try:
         driver.get(url)
         driver.save_screenshot(file_path)
-        print(f"Screenshot saved for {url} at {file_path}")
+        with open(file_path, "rb") as image_file:
+            base64_image = base64.b64encode(image_file.read()).decode('utf-8')
+        os.remove(file_path)  # Remove the temporary file
+        return base64_image
     except Exception as e:
         print(f"Error taking screenshot for {url}: {e}")
+        return None
     finally:
         driver.quit()
-    return file_path
 
 
 
@@ -764,7 +848,7 @@ def main():
         parser.add_argument("-cookie", action="store_true", help="Enable checking of cookie values")
         parser.add_argument("-method", action="store_true", help="Check which HTTP Debugging methods are enabled")
         parser.add_argument("-headers", action="store_true", help="Enable checking of security headers")
-        parser.add_argument("-ssl", action="store_true", help="Enable checking of SSL/TLS versions")
+        parser.add_argument("-ssl", action="store_true", help="Enable checking of SSL/TTLS versions")
         parser.add_argument("-tech", action="store_true", help="Identify web technologies used")
         parser.add_argument("-social", action="store_true", help="Check social media links on the website")
         parser.add_argument("-cors", action="store_true", help="Check for CORS vulnerabilities on the website")
@@ -774,6 +858,7 @@ def main():
         parser.add_argument("-cjacking", action="store_true", help="Perform clickjacking vulnerability check")
         parser.add_argument("-response", action="store_true", help="Get response information without source code")
         parser.add_argument("-sshot", action="store_true", help="Take a screenshot of the website")
+        parser.add_argument("-default", action="store_true", help="Check for default pages")
         parser.add_argument("-all", action="store_true", help="Perform all checks")
         parser.add_argument("-output", type=str, help="Output HTML report to the specified file")
 
@@ -781,7 +866,7 @@ def main():
         
         html_report = []
 
-        if args.all and (args.cookie or args.method or args.headers or args.ssl or args.tech or args.social or args.cors or args.ports or args.spf or args.dmarc or args.cjacking or args.response):
+        if args.all and (args.cookie or args.method or args.headers or args.ssl or args.tech or args.social or args.cors or args.ports or args.spf or args.dmarc or args.cjacking or args.response or args.default):
             parser.error("-all flag can only be used with -file and -url flags")
 
         urls = args.url or []  
@@ -922,6 +1007,7 @@ def main():
                 print("\n")
                 
             if args.response or args.all:
+                print("\n Screenshot taken.")
                 html_report.append("<div class='result'><h3><span class='title'>Response Information</span><span class='toggle-icon'>+</span></h3>")
                 html_report.append("<div class='content'>")
                 print_banner_with_border("Response Information")
@@ -933,9 +1019,22 @@ def main():
                 print_banner_with_border("Screenshot")
                 html_report.append("<div class='result'><h3><span class='title'>Screenshot</span><span class='toggle-icon'>+</span></h3>")
                 html_report.append("<div class='content'>")
-                screenshot_path = take_screenshot(url)
-                html_report.append(f"<p><strong>Screenshot saved at:</strong> <a href='{screenshot_path}'>{screenshot_path}</a></p>")
-                html_report.append(f"<img src='{screenshot_path}' alt='Screenshot of {url}' style='width: 100%; max-width: 600px;'>")
+                base64_image = take_screenshot(url)
+                if base64_image:
+                    html_report.append(f"<p><strong>Screenshot:</strong></p>")
+                    html_report.append(f"<img src='data:image/png;base64,{base64_image}' alt='Screenshot of {url}' style='width: 100%; max-width: 600px;'>")
+                else:
+                    html_report.append("<p><strong>Screenshot could not be taken.</strong></p>")
+                html_report.append("</div></div>")
+                print("\n")
+
+            if args.default or args.all:
+                print_banner_with_border("Default Page Check")
+                html_report.append("<div class='result'><h3><span class='title'>Default Page Check</span><span class='toggle-icon'>+</span></h3>")
+                html_report.append("<div class='content'>")
+                is_vulnerable, message = check_default_page(url, html_report)
+                print(f"Is vulnerable: {is_vulnerable}\n{message}")
+                html_report.append(f"<p>{message}</p>")
                 html_report.append("</div></div>")
                 print("\n")
 
