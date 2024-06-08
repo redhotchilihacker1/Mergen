@@ -58,6 +58,7 @@ options:
   -cjacking       Perform clickjacking vulnerability check
   -response       Get response information without source code
   -sshot          Take a screenshot of the website
+  -default        Check for default pages
   -all            Perform all checks
   -output OUTPUT  Output HTML report to the specified file
 ```
