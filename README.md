@@ -49,7 +49,7 @@ options:
   -method         Check which HTTP Debugging methods are enabled
   -headers        Enable checking of security headers
   -ssl            Enable checking of SSL/TLS versions
-  -tech           Identify web technologies used
+  -tech           Identify web technologies used and find assigned CVE's
   -social         Check social media links on the website
   -cors           Check for CORS vulnerabilities on the website
   -ports          Scan for popular ports
