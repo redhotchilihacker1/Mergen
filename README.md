@@ -38,7 +38,7 @@ You can use several flags at one such as:
 python3 mergen.py -url https://example.com -ssl -cookie -cors
 ```
 
-You can generate a comprehensive TML report
+You can generate a comprehensive HTML report
 ```bash
 python3 mergen.py -url https://example.com -all -output test.html
 ```
