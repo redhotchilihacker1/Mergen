@@ -1,4 +1,4 @@
-# Mergen
+# Mergen v1.3
 
 Mergen is a web scanning tool to conduct basic recon steps and identify several vulnerabilites during your pentest process.
 
@@ -48,24 +48,25 @@ python3 mergen.py -url https://example.com -all -output test.html
 options:
 ```bash
   -h, --help      show this help message and exit
-  -url [URL ...]  URL of the website to be analyzed
-  -file FILE      File containing URLs to be analyzed
-  -cookie         Enable checking of cookie values
-  -method         Check which HTTP Debugging methods are enabled
-  -headers        Enable checking of security headers
-  -ssl            Enable checking of SSL/TLS versions
-  -tech           Identify web technologies used and find assigned CVE's
-  -social         Check social media links on the website
-  -cors           Check for CORS vulnerabilities on the website
-  -ports          Scan for popular ports
-  -spf            Perform SPF policy check
-  -dmarc          Perform DMARC policy check
-  -cjacking       Perform clickjacking vulnerability check
-  -response       Get response information without source code
-  -sshot          Take a screenshot of the website
-  -default        Check for default pages
-  -all            Perform all checks
-  -output OUTPUT  Output HTML report to the specified file
+  --url [URL ...]  URL of the website to be analyzed
+  --file FILE      File containing URLs to be analyzed
+  --cookie         Enable checking of cookie values
+  --method         Check which HTTP Debugging methods are enabled
+  --headers        Enable checking of security headers
+  --ssl            Enable checking of SSL/TLS versions
+  --tech           Identify web technologies used and find assigned CVE's
+  --social         Check social media links on the website
+  --cors           Check for CORS vulnerabilities on the website
+  --ports          Scan for popular ports
+  --spf            Perform SPF policy check
+  --dmarc          Perform DMARC policy check
+  --cjacking       Perform clickjacking vulnerability check
+  --response       Get response information without source code
+  --sshot          Take a screenshot of the website
+  --default        Check for default pages
+  --reverse        Perform reverse IP lookup
+  --all            Perform all checks
+  --output OUTPUT  Output HTML report to the specified file
 ```
 
 ## Special Thanks
