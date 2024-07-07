@@ -68,7 +68,8 @@ Options:
   --all            Perform all checks
   --output OUTPUT  Output HTML report to the specified file
 ```
-![image](https://github.com/redhotchilihacker1/Mergen/assets/72512209/e650c2e4-2429-40f8-9882-374a72c4d962)
+![image](https://github.com/redhotchilihacker1/Mergen/assets/72512209/f3ac7ea0-57f7-4982-8a66-41dd2c6d6f81)
+
 
 ## Special Thanks
 
