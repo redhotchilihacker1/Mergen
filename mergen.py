@@ -12,6 +12,10 @@ import os
 import hashlib
 import shutil
 import base64
+import dns.resolver
+import cloudscraper
+import time
+from html import escape
 from bs4 import BeautifulSoup
 from datetime import datetime
 from colorama import Fore, Style
@@ -19,8 +23,10 @@ from urllib.parse import urlparse
 from instagramy import InstagramUser
 from requests.exceptions import SSLError
 from selenium import webdriver
+from selenium.webdriver.common.by import By
 from selenium.webdriver.chrome.service import Service
 from webdriver_manager.chrome import ChromeDriverManager
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
@@ -278,10 +284,8 @@ def get_technologies(url, html_report):
             technologies = json.loads(result.stdout)
             if technologies:
                 print("Technologies used in the given website:")
-                html_report.append("<div class='result'><h3>Technologies used in the given website:</h3>")
+                html_report.append("<div class='result'><h3>Technologies used:</h3>")
                 
-                tech_info = []
-
                 for category, tech_list in technologies.items():
                     print(f"\n{category.capitalize()}:")
                     html_report.append(f"<h4>{category.capitalize()}:</h4>")
@@ -298,59 +302,107 @@ def get_technologies(url, html_report):
                             </div>
                         """)
 
+                html_report.append("</div>")
+                
+                # Adding CVE search results section after technology detection
+                html_report.append("<div class='result'><h3>CVE Entries</h3><div class='content'>")
+                print("\nCVE Entries:")
+                cve_found = False
+                for category, tech_list in technologies.items():
+                    for tech_entry in tech_list:
+                        app = tech_entry.get('app', 'Unknown Technology')
+                        ver = tech_entry.get('ver', 'None')
                         if ver and ver.lower() != 'none':
-                            tech_info.append((app, ver))
-
-                html_report.append("</div>")
-
-                print("\n=== CVE Results ===")
-                html_report.append("<div class='result'><h3>CVE Results</h3>")
-                for app, ver in tech_info:
-                    query = f"{app}+{ver}"
-                    cve_url = f"https://www.opencve.io/cve?tag=&cvss=&search={query}"
-                    headers = {
-                        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3"
-                    }
-
-                    response = requests.get(cve_url, headers=headers)
-                    response.raise_for_status()  # Kötü durum kodları için hata ver
-
-                    soup = BeautifulSoup(response.text, 'html.parser')
-                    cve_tags = soup.find_all('a', href=True)
-
-                    cve_ids = [tag for tag in cve_tags if tag.text.startswith('CVE-')]
-
-                    print(f"\nCVE Codes for {app} {ver}:")
-                    html_report.append(f"<div class='tech-group'><h4>CVE Codes for {app} {ver}:</h4>")
-                    
-                    if not cve_ids:
-                        print("No CVEs found for the specified product and version.")
-                        html_report.append("<p>No CVEs found for the specified product and version.</p>")
-                    else:
-                        for cve_tag in cve_ids:
-                            cve_id = cve_tag.text
-                            cve_link = f"https://www.opencve.io{cve_tag['href']}"
-                            print(f"{cve_id}: {cve_link}")
-                            html_report.append(f"<p>{cve_id}: <a href='{cve_link}'>{cve_link}</a></p>")
-                    
-                    html_report.append("</div>")
-                html_report.append("</div>")
+                            if search_cve(app, ver, html_report, max_results=10):  # Limit to 10 results
+                                cve_found = True
+                if not cve_found:
+                    html_report.append("<p>No CVE entries found.</p>")
+                html_report.append("</div></div>")
 
             else:
                 print("No technologies found.")
-                html_report.append("<p>No technologies found.</p>")
+                html_report.append("<div class='result'><h3>Technologies used:</h3><p>No technologies found.</p></div>")
             return technologies
         else:
             print("Error: Couldn't retrieve technologies.")
-            html_report.append("<p>Error: Couldn't retrieve technologies.</p>")
+            html_report.append("<div class='result'><h3>Technologies used:</h3><p>Error: Couldn't retrieve technologies.</p></div>")
             return None
 
     except Exception as e:
         print(f"Error: {e}")
-        html_report.append(f"<p>Error: {e}</p>")
+        html_report.append(f"<div class='result'><h3>Technologies used:</h3><p>Error: {e}</p></div>")
         return None
 
+def fetch_cve_description(cve_link):
+    try:
+        response = requests.get(cve_link)
+        if response.status_code == 200:
+            soup = BeautifulSoup(response.text, 'html.parser')
+            description_tag = soup.find('div', {'id': 'GeneratedTable'}).find('td', {'colspan': '2'})
+            if description_tag:
+                return escape(description_tag.text.strip())
+        return "Description not found."
+    except Exception as e:
+        return escape(str(e))
 
+def search_cve(technology, version, html_report, max_results=10):
+    url = f"https://cve.mitre.org/cgi-bin/cvekey.cgi?keyword={technology}+{version}"
+    response = requests.get(url)
+    
+    if response.status_code == 200:
+        soup = BeautifulSoup(response.text, 'html.parser')
+        results = soup.find('div', {'id': 'TableWithRules'})
+        
+        if results:
+            cve_entries = results.find_all('a', href=True)
+            if cve_entries:
+                print(f"\nCVE Entries for {technology} {version}:")
+                html_report.append(f"<div class='cve-entry'><h4>CVE Entries for {technology} {version}:</h4><ul>")
+
+                count = 0
+                with ThreadPoolExecutor(max_workers=10) as executor:
+                    future_to_cve = {executor.submit(fetch_cve_description, f"https://cve.mitre.org{cve['href']}"): cve for cve in cve_entries[:max_results]}
+                    
+                    for future in as_completed(future_to_cve):
+                        cve = future_to_cve[future]
+                        cve_code = cve.text.strip()
+                        cve_link = f"https://cve.mitre.org{cve['href']}"
+                        description = future.result()
+                        
+                        if technology.lower() in description.lower() and version.lower() in description.lower():
+                            print(f"CVE: {cve_code}")
+                            print(f"Link: {cve_link}")
+                            print(f"Description: {description}\n")
+                            
+                            html_report.append(f"<li><strong>CVE:</strong> {cve_code}</li>")
+                            html_report.append(f"<li><strong>Link:</strong> <a href='{cve_link}'>{cve_link}</a></li>")
+                            html_report.append(f"<li><strong>Description:</strong> {description}</li>")
+                            html_report.append("<hr>")
+                            count += 1
+
+                        if count >= max_results:
+                            break
+
+                if count == 0:
+                    print("No relevant CVE entries found.")
+                    html_report.append("<p>No relevant CVE entries found.</p>")
+                
+                html_report.append("</ul></div>")
+                return True
+            else:
+                print("No CVE entries found.")
+                html_report.append("<div class='cve-entry'><p>No CVE entries found.</p></div>")
+                return False
+        else:
+            print("No CVE entries found.")
+            html_report.append("<div class='cve-entry'><p>No CVE entries found.</p></div>")
+            return False
+    else:
+        print(f"Error fetching data: {response.status_code}")
+        html_report.append(f"<div class='cve-entry'><p>Error fetching data: {response.status_code}</p></div>")
+        return False
+
+        
 def check_social_media_links(url, html_report):
     social_media_links = {
         "facebook": "https://www.facebook.com/",
@@ -556,14 +608,24 @@ def clickjacking(url, html_report):
         html_report.append("<p>HTML file generated: clickjack_test.html</p>")
         return True
 
+from urllib.parse import urlparse
+import os
+
+from urllib.parse import urlparse
+import os
+
 def get_domains_from_file(file_path):
     with open(file_path, 'r') as file:
         urls = file.readlines()
     urls = [url.strip() for url in urls]
     domains = [urlparse(url).netloc for url in urls]
     return domains
+    
+def save_html_report(report, filename, domains):
+    is_single_domain = len(domains) == 1
+    sidebar_links = "" if is_single_domain else "".join([f'<a href="#domain-{i}">{domain}</a>' for i, domain in enumerate(domains)])
+    content_sections = "".join([f'<div id="domain-{i}" class="content">{report[i]}</div>' for i in range(len(report))])
 
-def save_html_report(report, filename):
     html_template = f"""
     <!DOCTYPE html>
     <html lang="en">
@@ -578,17 +640,85 @@ def save_html_report(report, filename):
                 color: #333;
                 margin: 0;
                 padding: 0;
-            }}
-            .container {{
-                width: 80%;
-                margin: auto;
+                display: flex;
+                height: 100vh;
                 overflow: hidden;
+            }}
+            .sidebar {{
+                width: 210px;
+                background: #333;
+                color: white;
                 padding: 20px;
-                background: #fff;
-                margin-top: 30px;
-                margin-bottom: 30px;
-                box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
-                border-radius: 8px;
+                box-shadow: 2px 0 5px rgba(0, 0, 0, 0.1);
+                height: 100%;
+                overflow-y: auto;
+                z-index: 1000;
+                position: fixed;
+                transition: transform 0.3s ease, width 0.3s ease;
+                transform: translateX(0);
+                display: flex;
+                flex-direction: column;
+                justify-content: space-between;
+                left: 0;
+            }}
+            .sidebar.collapsed {{
+                transform: translateX(-250px);
+                width: 230px;
+            }}
+            .sidebar h2 {{
+                font-size: 18px;
+                margin-bottom: 20px;
+                text-align: center;
+                color: white;
+            }}
+            .sidebar a {{
+                color: white;
+                text-decoration: none;
+                display: block;
+                padding: 10px 0;
+                transition: background 0.3s;
+            }}
+            .sidebar a:hover {{
+                background: #575757;
+            }}
+            .sidebar .footer {{
+                text-align: center;
+                padding: 20px;
+                font-size: 12px;
+                color: #666;
+                margin-top: auto;
+            }}
+            .sidebar .footer a {{
+                color: #4CAF50;
+                text-decoration: none;
+            }}
+            .sidebar-toggle {{
+                position: fixed;
+                top: 20px;
+                left: 220px;
+                background: #333;
+                color: white;
+                border: none;
+                padding: 10px;
+                cursor: pointer;
+                z-index: 1001;
+                transition: left 0.3s ease;
+            }}
+            .sidebar.collapsed + .sidebar-toggle {{
+                left: 0;
+            }}
+            .content-container {{
+                padding: 20px;
+                flex-grow: 1;
+                overflow: auto;
+                background: white;
+                margin-left: 250px;
+                position: relative;
+                z-index: 0;
+                transition: margin-left 0.3s ease;
+            }}
+            .sidebar.collapsed + .sidebar-toggle + .content-container {{
+                margin-left: 0;
             }}
             h1, h2, h3 {{
                 color: #333;
@@ -612,7 +742,7 @@ def save_html_report(report, filename):
                 padding: 10px 0;
                 text-align: center;
                 border-radius: 8px 8px 0 0;
-                margin: -20px -20px 20px -20px;
+                margin-bottom: 20px;
             }}
             .header h1 {{
                 margin: 0;
@@ -643,6 +773,10 @@ def save_html_report(report, filename):
                 display: flex;
                 align-items: center;
                 justify-content: space-between;
+                padding: 10px;
+                background: #f4f4f9;
+                border-radius: 5px;
+                border: 1px solid #e0e0e0;
             }}
             .result h3 .title {{
                 flex-grow: 1;
@@ -653,9 +787,10 @@ def save_html_report(report, filename):
             }}
             .footer {{
                 text-align: center;
-                padding: 10px;
+                padding: 20px;
                 font-size: 12px;
                 color: #666;
+                margin-top: auto;
             }}
             .footer a {{
                 color: #4CAF50;
@@ -670,13 +805,52 @@ def save_html_report(report, filename):
             .content {{
                 display: none;
             }}
+            .content.active {{
+                display: block;
+                margin-top: 10px;
+                padding: 10px;
+                background: #fff;
+                border: 1px solid #e0e0e0;
+                border-radius: 5px;
+            }}
+            .cve-entry {{
+                margin-bottom: 10px;
+                padding: 10px;
+                border: 1px solid #e0e0e0;
+                border-radius: 5px;
+                background: #fff;
+            }}
+            .cve-entry h4 {{
+                margin-top: 0;
+            }}
+            .cve-entry ul {{
+                list-style-type: disc;
+                padding-left: 20px;
+            }}
+            .cve-entry ul li {{
+                margin-bottom: 5px;
+            }}
         </style>
         <script>
             document.addEventListener('DOMContentLoaded', (event) => {{
                 const contents = document.querySelectorAll('.content');
-                contents.forEach(content => {{
-                    content.style.display = 'none';
+                const domainLinks = document.querySelectorAll('.sidebar a');
+
+                domainLinks.forEach((link, index) => {{
+                    link.addEventListener('click', (e) => {{
+                        e.preventDefault();
+                        contents.forEach(content => {{
+                            content.classList.remove('active');
+                        }});
+                        document.getElementById('domain-' + index).classList.add('active');
+                    }});
                 }});
+
+                // Show the first domain by default
+                if (contents.length > 0) {{
+                    contents[0].classList.add('active');
+                }}
+
                 const headers = document.querySelectorAll('.result h3');
                 headers.forEach(header => {{
                     const toggleIcon = header.querySelector('.toggle-icon');
@@ -687,18 +861,31 @@ def save_html_report(report, filename):
                         toggleIcon.textContent = isOpen ? '+' : '-';
                     }});
                 }});
+
+                const sidebar = document.querySelector('.sidebar');
+                const toggleButton = document.querySelector('.sidebar-toggle');
+
+                if (sidebar && toggleButton) {{
+                    toggleButton.addEventListener('click', () => {{
+                        sidebar.classList.toggle('collapsed');
+                        if (sidebar.classList.contains('collapsed')) {{
+                            toggleButton.style.left = '0';
+                        }} else {{
+                            toggleButton.style.left = '250px';
+                        }}
+                    }});
+                }}
             }});
         </script>
     </head>
     <body>
-        <div class="container">
+        {'<div class="sidebar"><h2>Scanned Domains</h2>' + sidebar_links + '<div class="footer"><p>Report generated by <a href="https://github.com/redhotchilihacker1/Mergen">Mergen</a></p></div></div>' if not is_single_domain else ""}
+        {'<button class="sidebar-toggle">☰</button>' if not is_single_domain else ""}
+        <div class="content-container">
             <div class="header">
                 <h1>Security Scan Report</h1>
             </div>
-            {"".join(report)}
-            <div class="footer">
-                <p>Report generated by Security Scan Tool. <a href="file://{os.path.abspath(filename)}">Open the report</a></p>
-            </div>
+            {content_sections}
         </div>
     </body>
     </html>
@@ -708,7 +895,6 @@ def save_html_report(report, filename):
     report_path = os.path.abspath(filename)
     print(f"HTML report saved to: {report_path}")
     print(f"Open the report at: file://{report_path}")
-
     
 def check_response_info(url, html_report):
     try:
@@ -772,8 +958,14 @@ def check_response_info(url, html_report):
 
 def check_default_page(url, html_report):
     try:
-        response = requests.get(url)
-        
+        response = requests.get(url, allow_redirects=False)
+
+        if response.status_code in [301, 302]:
+            redirect_url = response.headers.get('Location')
+            print(f"Redirected to: {redirect_url}")
+            html_report.append(f"<p>Redirected to: {redirect_url}</p>")
+            return False, f"Redirected to: {redirect_url}"
+
         if response.status_code == 200:
             content = response.text.lower()
             default_page_indicators = [
@@ -801,15 +993,16 @@ def check_default_page(url, html_report):
             ]
             
             for indicator in default_page_indicators:
-                if indicator in content:
+                if f">{indicator}<" in content or f" {indicator} " in content:
                     html_report.append(f"<p>Found default page indicator: '{indicator}'</p>")
+                    print(f"Found default page indicator: '{indicator}'")
                     return True, f"Found default page indicator: '{indicator}'"
         
         return False, "No default page indicator found."
     except requests.RequestException as e:
         html_report.append(f"<p>Error occurred: {str(e)}</p>")
+        print(f"Error occurred: {str(e)}")
         return False, f"Error occurred: {str(e)}"
-
 
 
 def take_screenshot(url):
@@ -837,37 +1030,85 @@ def take_screenshot(url):
     finally:
         driver.quit()
 
+def reverse_ip_lookup(url, html_report):
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+        'Content-Type': 'application/x-www-form-urlencoded'
+    }
+    
+    try:
+        ip_address = socket.gethostbyname(urlparse(url).hostname)
+        print(f"IP Address: {ip_address}")
+        html_report.append("<div class='result'><h3><span class='title'>Reverse IP Lookup</span><span class='toggle-icon'>+</span></h3>")
+        html_report.append("<div class='content'>")
 
+        try:
+            reverse_dns_api = "https://domains.yougetsignal.com/domains.php"
+            response = requests.post(reverse_dns_api, data={'remoteAddress': ip_address}, headers=headers)
+            if response.status_code == 200:
+                data = response.json()
+                domains = data.get('domainArray', [])
+                if domains:
+                    print(f"\nDomains hosted on the same server as {url}:")
+                    html_report.append("<ul>")
+                    for domain_info in domains[:20]:  # Limit to first 20 results
+                        domain = domain_info[0]
+                        if domain != url:
+                            print(domain)
+                            html_report.append(f"<li>{domain}</li>")
+                    html_report.append("</ul>")
+                    restriction_message = "\nThis is a restricted result because of the limitation. Check out yougetsignal.com website to get more information."
+                    print(restriction_message)
+                    html_report.append(f"<p>{restriction_message}</p>")
+                    print("\n")
+                else:
+                    print(f"No other domains found hosted on the same server as {url}.")
+                    html_report.append(f"<p>No other domains found hosted on the same server as {url}.</p>")
+            else:
+                print(f"Error: Could not perform reverse IP lookup for {url}.")
+                html_report.append("<p>Error: Could not perform reverse IP lookup for {url}.</p>")
+        except Exception as e:
+            print(f"Error: {e}")
+            html_report.append(f"<p>Error: {e}</p>")
 
+        html_report.append("</div></div>")
+    except Exception as e:
+        print(f"Error: {e}")
+        html_report.append(f"<div class='result'><h3><span class='title'>Reverse IP Lookup</span><span class='toggle-icon'>+</span></h3>")
+        html_report.append(f"<div class='content'><p>Error: {e}</p></div></div>")
+
+        
 def main():
     try:
         parser = argparse.ArgumentParser(description="This script performs various security checks on a given website.")
         group = parser.add_mutually_exclusive_group(required=True)
-        group.add_argument("-url", nargs="*", type=str, help="URL of the website to be analyzed")
-        group.add_argument("-file", type=str, help="File containing URLs to be analyzed")
-        parser.add_argument("-cookie", action="store_true", help="Enable checking of cookie values")
-        parser.add_argument("-method", action="store_true", help="Check which HTTP Debugging methods are enabled")
-        parser.add_argument("-headers", action="store_true", help="Enable checking of security headers")
-        parser.add_argument("-ssl", action="store_true", help="Enable checking of SSL/TTLS versions")
-        parser.add_argument("-tech", action="store_true", help="Identify web technologies used and find assigned CVE's")
-        parser.add_argument("-social", action="store_true", help="Check social media links on the website")
-        parser.add_argument("-cors", action="store_true", help="Check for CORS vulnerabilities on the website")
-        parser.add_argument("-ports", action="store_true", help="Scan for popular ports")
-        parser.add_argument("-spf", action="store_true", help="Perform SPF policy check")
-        parser.add_argument("-dmarc", action="store_true", help="Perform DMARC policy check")
-        parser.add_argument("-cjacking", action="store_true", help="Perform clickjacking vulnerability check")
-        parser.add_argument("-response", action="store_true", help="Get response information without source code")
-        parser.add_argument("-sshot", action="store_true", help="Take a screenshot of the website")
-        parser.add_argument("-default", action="store_true", help="Check for default pages")
-        parser.add_argument("-all", action="store_true", help="Perform all checks")
-        parser.add_argument("-output", type=str, help="Output HTML report to the specified file")
+        group.add_argument("--url", nargs="*", type=str, help="URL of the website to be analyzed")
+        group.add_argument("--file", type=str, help="File containing URLs to be analyzed")
+        parser.add_argument("--cookie", action="store_true", help="Enable checking of cookie values")
+        parser.add_argument("--method", action="store_true", help="Check which HTTP Debugging methods are enabled")
+        parser.add_argument("--headers", action="store_true", help="Enable checking of security headers")
+        parser.add_argument("--ssl", action="store_true", help="Enable checking of SSL/TLS versions")
+        parser.add_argument("--tech", action="store_true", help="Identify web technologies used")
+        parser.add_argument("--social", action="store_true", help="Check social media links on the website")
+        parser.add_argument("--cors", action="store_true", help="Check for CORS vulnerabilities on the website")
+        parser.add_argument("--ports", action="store_true", help="Scan for popular ports")
+        parser.add_argument("--spf", action="store_true", help="Perform SPF policy check")
+        parser.add_argument("--dmarc", action="store_true", help="Perform DMARC policy check")
+        parser.add_argument("--cjacking", action="store_true", help="Perform clickjacking vulnerability check")
+        parser.add_argument("--response", action="store_true", help="Get response information without source code")
+        parser.add_argument("--sshot", action="store_true", help="Take a screenshot of the website")
+        parser.add_argument("--default", action="store_true", help="Check for default welcome pages")
+        parser.add_argument("--reverse", action="store_true", help="Perform reverse IP lookup")
+        parser.add_argument("--all", action="store_true", help="Perform all checks")
+        parser.add_argument("--output", type=str, help="Output HTML report to the specified file")
 
         args = parser.parse_args()
         
-        html_report = []
+        html_reports = []  # Her domain için ayrı HTML raporu
+        domains = []  # Taranan domain'ler listesi
 
-        if args.all and (args.cookie or args.method or args.headers or args.ssl or args.tech or args.social or args.cors or args.ports or args.spf or args.dmarc or args.cjacking or args.response or args.default):
-            parser.error("-all flag can only be used with -file and -url flags")
+        if args.all and (args.cookie or args.method or args.headers or args.ssl or args.tech or args.social or args.cors or args.ports or args.spf or args.dmarc or args.cjacking or args.response or args.welcome or args.reverse):
+            parser.error("--all flag can only be used with --file and --url flags")
 
         urls = args.url or []  
         if args.file:
@@ -883,7 +1124,8 @@ def main():
                 printed_banner = True
                 
             print_banner_with_border(f"Checking {url}")
-            html_report.append(f"<div class='border'><h2>Checking {url}</h2></div>")
+            domains.append(url)  # Domain listesine ekleme
+            domain_html_report = []  # Bu domain için HTML raporu
 
             ip_address = socket.gethostbyname(urlparse(url).hostname)
             hostname = urlparse(url).hostname
@@ -894,148 +1136,155 @@ def main():
             print(f"Hostname: {hostname}")
             print(f"Scan Start Time: {start_time.strftime('%Y-%m-%d %H:%M:%S')}\n")
 
-            html_report.append(f"<p><strong>IP Address:</strong> {ip_address}</p>")
-            html_report.append(f"<p><strong>Hostname:</strong> {hostname}</p>")
-            html_report.append(f"<p><strong>Scan Start Time:</strong> {start_time.strftime('%Y-%m-%d %H:%M:%S')}</p>")
+            domain_html_report.append(f"<p><strong>IP Address:</strong> {ip_address}</p>")
+            domain_html_report.append(f"<p><strong>Hostname:</strong> {hostname}</p>")
+            domain_html_report.append(f"<p><strong>Scan Start Time:</strong> {start_time.strftime('%Y-%m-%d %H:%M:%S')}</p>")
 
             if args.ssl or args.all:
                 print_banner_with_border("SSL/TLS Versions")
-                html_report.append("<div class='result'><h3><span class='title'>SSL/TLS Versions</span><span class='toggle-icon'>+</span></h3>")
-                html_report.append("<div class='content'>")
-                check_ssl_versions(url, html_report)
-                check_sslv2_support(url, html_report)
-                check_sslv3_support(url, html_report)
-                html_report.append("</div></div>")
+                domain_html_report.append("<div class='result'><h3><span class='title'>SSL/TLS Versions</span><span class='toggle-icon'>+</span></h3>")
+                domain_html_report.append("<div class='content'>")
+                check_ssl_versions(url, domain_html_report)
+                check_sslv2_support(url, domain_html_report)
+                check_sslv3_support(url, domain_html_report)
+                domain_html_report.append("</div></div>")
                 print("\n")
 
             if args.cookie or args.all:
                 print_banner_with_border("Cookie Check")
-                html_report.append("<div class='result'><h3><span class='title'>Cookie Check</span><span class='toggle-icon'>+</span></h3>")
-                html_report.append("<div class='content'>")
-                get_cookies_from_url(url, html_report)
-                html_report.append("</div></div>")
+                domain_html_report.append("<div class='result'><h3><span class='title'>Cookie Check</span><span class='toggle-icon'>+</span></h3>")
+                domain_html_report.append("<div class='content'>")
+                get_cookies_from_url(url, domain_html_report)
+                domain_html_report.append("</div></div>")
                 print("\n")
 
             if args.headers or args.all:
                 print_banner_with_border("Security Headers")
-                html_report.append("<div class='result'><h3><span class='title'>Security Headers</span><span class='toggle-icon'>+</span></h3>")
-                html_report.append("<div class='content'>")
-                check_security_headers(url, html_report)
-                html_report.append("</div></div>")
+                domain_html_report.append("<div class='result'><h3><span class='title'>Security Headers</span><span class='toggle-icon'>+</span></h3>")
+                domain_html_report.append("<div class='content'>")
+                check_security_headers(url, domain_html_report)
+                domain_html_report.append("</div></div>")
                 print("\n")
 
             if args.method or args.all:
                 print_banner_with_border("HTTP Debugging Methods")
-                html_report.append("<div class='result'><h3><span class='title'>HTTP Debugging Methods</span><span class='toggle-icon'>+</span></h3>")
-                html_report.append("<div class='content'>")
-                check_debugging_enabled(url, html_report)
-                html_report.append("</div></div>")
+                domain_html_report.append("<div class='result'><h3><span class='title'>HTTP Debugging Methods</span><span class='toggle-icon'>+</span></h3>")
+                domain_html_report.append("<div class='content'>")
+                check_debugging_enabled(url, domain_html_report)
+                domain_html_report.append("</div></div>")
                 print("\n")
 
             if args.tech or args.all:
                 print_banner_with_border("Web Technologies")
-                html_report.append("<div class='result'><h3><span class='title'>Web Technologies</span><span class='toggle-icon'>+</span></h3>")
-                html_report.append("<div class='content'>")
-                get_technologies(url, html_report)
-                html_report.append("</div></div>")
+                domain_html_report.append("<div class='result'><h3><span class='title'>Web Technologies</span><span class='toggle-icon'>+</span></h3>")
+                domain_html_report.append("<div class='content'>")
+                get_technologies(url, domain_html_report)
+                domain_html_report.append("</div></div>")
                 print("\n")
 
             if args.social or args.all:
                 print_banner_with_border("Broken Link Hijack Check")
-                html_report.append("<div class='result'><h3><span class='title'>Broken Link Hijack Check</span><span class='toggle-icon'>+</span></h3>")
-                html_report.append("<div class='content'>")
-                check_social_media_links(url, html_report)
-                html_report.append("</div></div>")
+                domain_html_report.append("<div class='result'><h3><span class='title'>Broken Link Hijack Check</span><span class='toggle-icon'>+</span></h3>")
+                domain_html_report.append("<div class='content'>")
+                check_social_media_links(url, domain_html_report)
+                domain_html_report.append("</div></div>")
                 print("\n")
 
             if args.cors or args.all:
                 print_banner_with_border("CORS Misconfigurations")
-                html_report.append("<div class='result'><h3><span class='title'>CORS Misconfigurations</span><span class='toggle-icon'>+</span></h3>")
-                html_report.append("<div class='content'>")
-                check_cors_vulnerability(url, html_report)
-                html_report.append("</div></div>")
+                domain_html_report.append("<div class='result'><h3><span class='title'>CORS Misconfigurations</span><span class='toggle-icon'>+</span></h3>")
+                domain_html_report.append("<div class='content'>")
+                check_cors_vulnerability(url, domain_html_report)
+                domain_html_report.append("</div></div>")
                 print("\n")
 
             if args.ports or args.all:
                 print_banner_with_border("Port Scan")
-                html_report.append("<div class='result'><h3><span class='title'>Port Scan</span><span class='toggle-icon'>+</span></h3>")
-                html_report.append("<div class='content'>")
-                scan_popular_ports(url, html_report)
-                html_report.append("</div></div>")
+                domain_html_report.append("<div class='result'><h3><span class='title'>Port Scan</span><span class='toggle-icon'>+</span></h3>")
+                domain_html_report.append("<div class='content'>")
+                scan_popular_ports(url, domain_html_report)
+                domain_html_report.append("</div></div>")
                 print("\n")
 
             if args.spf or args.all:
                 print_banner_with_border("SPF Policy Check")
-                html_report.append("<div class='result'><h3><span class='title'>SPF Policy Check</span><span class='toggle-icon'>+</span></h3>")
-                html_report.append("<div class='content'>")
-                spf_result = check_spf(url, html_report)
+                domain_html_report.append("<div class='result'><h3><span class='title'>SPF Policy Check</span><span class='toggle-icon'>+</span></h3>")
+                domain_html_report.append("<div class='content'>")
+                spf_result = check_spf(url, domain_html_report)
                 if spf_result:
                     print(f"{Fore.GREEN + Style.BRIGHT}SPF record have been found{Style.RESET_ALL}")
-                    html_report.append("<p><span style='color:green;'>SPF record have been found</span></p>")
+                    domain_html_report.append("<p><span style='color:green;'>SPF record have been found</span></p>")
                 else:
                     print(f"{Fore.RED + Style.BRIGHT}SPF record have not been found{Style.RESET_ALL}")
-                    html_report.append("<p><span style='color:red;'>SPF record have not been found</span></p>")
-                html_report.append("</div></div>")
+                    domain_html_report.append("<p><span style='color:red;'>SPF record have not been found</span></p>")
+                domain_html_report.append("</div></div>")
                 print("\n")
 
             if args.dmarc or args.all:
                 print_banner_with_border("DMARC Policy Check")
-                html_report.append("<div class='result'><h3><span class='title'>DMARC Policy Check</span><span class='toggle-icon'>+</span></h3>")
-                html_report.append("<div class='content'>")
-                dmarc_result = check_dmarc(url, html_report)
+                domain_html_report.append("<div class='result'><h3><span class='title'>DMARC Policy Check</span><span class='toggle-icon'>+</span></h3>")
+                domain_html_report.append("<div class='content'>")
+                dmarc_result = check_dmarc(url, domain_html_report)
                 if dmarc_result:
                     print(f"{Fore.GREEN + Style.BRIGHT}DMARC record have been found{Style.RESET_ALL}")
-                    html_report.append("<p><span style='color:green;'>DMARC record have been found</span></p>")
+                    domain_html_report.append("<p><span style='color:green;'>DMARC record have been found</span></p>")
                 else:
                     print(f"{Fore.RED + Style.BRIGHT}DMARC record have not been found{Style.RESET_ALL}")
-                    html_report.append("<p><span style='color:red;'>DMARC record have not been found</span></p>")
-                html_report.append("</div></div>")
+                    domain_html_report.append("<p><span style='color:red;'>DMARC record have not been found</span></p>")
+                domain_html_report.append("</div></div>")
                 print("\n")
 
             if args.cjacking or args.all:
                 print_banner_with_border("Clickjacking Check")
-                html_report.append("<div class='result'><h3><span class='title'>Clickjacking Check</span><span class='toggle-icon'>+</span></h3>")
-                html_report.append("<div class='content'>")
-                cjacking_result = clickjacking(url, html_report)
+                domain_html_report.append("<div class='result'><h3><span class='title'>Clickjacking Check</span><span class='toggle-icon'>+</span></h3>")
+                domain_html_report.append("<div class='content'>")
+                cjacking_result = clickjacking(url, domain_html_report)
                 if cjacking_result:
                     print(f"{Fore.RED + Style.BRIGHT}Possible Clickjacking vulnerability.{Style.RESET_ALL}")
-                    html_report.append("<p><span style='color:red;'>Possible Clickjacking vulnerability.</span></p>")
+                    domain_html_report.append("<p><span style='color:red;'>Possible Clickjacking vulnerability.</span></p>")
                 else:
                     print(f"{Fore.GREEN + Style.BRIGHT}Clickjacking vulnerability not found.{Style.RESET_ALL}")
-                    html_report.append("<p><span style='color:green;'>Clickjacking vulnerability not found.</span></p>")
-                html_report.append("</div></div>")
+                    domain_html_report.append("<p><span style='color:green;'>Clickjacking vulnerability not found.</span></p>")
+                domain_html_report.append("</div></div>")
                 print("\n")
                 
             if args.response or args.all:
-                print("\n Screenshot taken.")
-                html_report.append("<div class='result'><h3><span class='title'>Response Information</span><span class='toggle-icon'>+</span></h3>")
-                html_report.append("<div class='content'>")
+                domain_html_report.append("<div class='result'><h3><span class='title'>Response Information</span><span class='toggle-icon'>+</span></h3>")
+                domain_html_report.append("<div class='content'>")
                 print_banner_with_border("Response Information")
-                check_response_info(url, html_report)
-                html_report.append("</div></div>")
+                check_response_info(url, domain_html_report)
+                domain_html_report.append("</div></div>")
                 print("\n")
                 
             if args.sshot or args.all:
                 print_banner_with_border("Screenshot")
-                html_report.append("<div class='result'><h3><span class='title'>Screenshot</span><span class='toggle-icon'>+</span></h3>")
-                html_report.append("<div class='content'>")
+                domain_html_report.append("<div class='result'><h3><span class='title'>Screenshot</span><span class='toggle-icon'>+</span></h3>")
+                domain_html_report.append("<div class='content'>")
                 base64_image = take_screenshot(url)
                 if base64_image:
-                    html_report.append(f"<p><strong>Screenshot:</strong></p>")
-                    html_report.append(f"<img src='data:image/png;base64,{base64_image}' alt='Screenshot of {url}' style='width: 100%; max-width: 600px;'>")
+                    domain_html_report.append(f"<p><strong>Screenshot:</strong></p>")
+                    domain_html_report.append(f"<img src='data:image/png;base64,{base64_image}' alt='Screenshot of {url}' style='width: 100%; max-width: 600px;'>")
                 else:
-                    html_report.append("<p><strong>Screenshot could not be taken.</strong></p>")
-                html_report.append("</div></div>")
+                    domain_html_report.append("<p><strong>Screenshot could not be taken.</strong></p>")
+                domain_html_report.append("</div></div>")
                 print("\n")
 
             if args.default or args.all:
-                print_banner_with_border("Default Page Check")
-                html_report.append("<div class='result'><h3><span class='title'>Default Page Check</span><span class='toggle-icon'>+</span></h3>")
-                html_report.append("<div class='content'>")
-                is_vulnerable, message = check_default_page(url, html_report)
-                print(f"Is vulnerable: {is_vulnerable}\n{message}")
-                html_report.append(f"<p>{message}</p>")
-                html_report.append("</div></div>")
+                print_banner_with_border("Default Welcome Page Check")
+                domain_html_report.append("<div class='result'><h3><span class='title'>Default Welcome Page Check</span><span class='toggle-icon'>+</span></h3>")
+                domain_html_report.append("<div class='content'>")
+                is_vulnerable, message = check_default_page(url, domain_html_report)
+                print(f"Is vulnerable: {is_vulnerable}\nMessage: {message}")
+                domain_html_report.append(f"<p>{message}</p>")
+                domain_html_report.append("</div></div>")
+                print("\n")
+            
+            if args.reverse or args.all:
+                print_banner_with_border("Reverse IP Lookup")
+                domain_html_report.append("<div class='result'><h3><span class='title'>Reverse IP Lookup</span><span class='toggle-icon'>+</span></h3>")
+                domain_html_report.append("<div class='content'>")
+                reverse_ip_lookup(url, domain_html_report)
+                domain_html_report.append("</div></div>")
                 print("\n")
 
             end_time = datetime.now()
@@ -1044,11 +1293,13 @@ def main():
             total_seconds = round(total_time.total_seconds(), 1)
             print("Total Scan Time:", total_seconds, "seconds.\n\n\n")
 
-            html_report.append(f"<p><strong>Scan End Time:</strong> {end_time.strftime('%Y-%m-%d %H:%M:%S')}</p>")
-            html_report.append(f"<p><strong>Total Scan Time:</strong> {total_seconds} seconds.</p><br><br>")
+            domain_html_report.append(f"<p><strong>Scan End Time:</strong> {end_time.strftime('%Y-%m-%d %H:%M:%S')}</p>")
+            domain_html_report.append(f"<p><strong>Total Scan Time:</strong> {total_seconds} seconds.</p><br><br>")
+
+            html_reports.append("".join(domain_html_report))
 
         if args.output:
-            save_html_report(html_report, args.output)
+            save_html_report(html_reports, args.output, domains)
 
     except KeyboardInterrupt:
         print(f"{bcolors.FAIL + bcolors.BOLD}The scan has been terminated by the user.{Style.RESET_ALL}")
