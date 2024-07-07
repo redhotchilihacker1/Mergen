@@ -45,7 +45,7 @@ python3 mergen.py -url https://example.com -all -output test.html
 
 ## Parameters
 
-options:
+Options:
 ```bash
   -h, --help      show this help message and exit
   --url [URL ...]  URL of the website to be analyzed
@@ -68,6 +68,7 @@ options:
   --all            Perform all checks
   --output OUTPUT  Output HTML report to the specified file
 ```
+![image](https://github.com/redhotchilihacker1/Mergen/assets/72512209/e650c2e4-2429-40f8-9882-374a72c4d962)
 
 ## Special Thanks
 
