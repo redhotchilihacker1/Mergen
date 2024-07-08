@@ -13,7 +13,6 @@ import hashlib
 import shutil
 import base64
 import dns.resolver
-import cloudscraper
 import time
 from html import escape
 from bs4 import BeautifulSoup
@@ -1107,7 +1106,7 @@ def main():
         html_reports = []  # Her domain için ayrı HTML raporu
         domains = []  # Taranan domain'ler listesi
 
-        if args.all and (args.cookie or args.method or args.headers or args.ssl or args.tech or args.social or args.cors or args.ports or args.spf or args.dmarc or args.cjacking or args.response or args.welcome or args.reverse):
+        if args.all and (args.cookie or args.method or args.headers or args.ssl or args.tech or args.social or args.cors or args.ports or args.spf or args.dmarc or args.cjacking or args.response or args.default or args.reverse):
             parser.error("--all flag can only be used with --file and --url flags")
 
         urls = args.url or []  
@@ -1270,7 +1269,7 @@ def main():
                 print("\n")
 
             if args.default or args.all:
-                print_banner_with_border("Default Welcome Page Check")
+                print_banner_with_border("Default Page Check")
                 domain_html_report.append("<div class='result'><h3><span class='title'>Default Welcome Page Check</span><span class='toggle-icon'>+</span></h3>")
                 domain_html_report.append("<div class='content'>")
                 is_vulnerable, message = check_default_page(url, domain_html_report)
